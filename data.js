@@ -191,7 +191,10 @@ const INITIAL_ITEMS = [
     ],
     image: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400&auto=format&fit=crop&q=80",
     invoiceUrl: "https://images.unsplash.com/photo-1554415707-9e4966a604f7?w=400&auto=format&fit=crop&q=80",
-    invoiceCost: 18500000
+    invoiceCost: 18500000,
+    purchaseDate: "2026-06-15",
+    purchaseVendor: "Công ty TNHH Bạt Sự Kiện Thuận Phát",
+    purchasePrice: 18500000
   },
   {
     id: "A002",
@@ -220,7 +223,11 @@ const INITIAL_ITEMS = [
       { programId: "PROG-2026-02", programName: "Hội thao Tập đoàn Viettel - 400 Khách", qty: 2, location: "Ecopark Hưng Yên" }
     ],
     image: "https://images.unsplash.com/photo-1516216628859-9bcceabb84ca?w=400&auto=format&fit=crop&q=80",
-    invoiceCost: 4500000
+    invoiceUrl: "https://images.unsplash.com/photo-1554415707-9e4966a604f7?w=400&auto=format&fit=crop&q=80",
+    invoiceCost: 4500000,
+    purchaseDate: "2026-07-20",
+    purchaseVendor: "Xưởng Sản Xuất Dây Thừng Nam Định",
+    purchasePrice: 4500000
   },
   {
     id: "A003",
@@ -245,7 +252,11 @@ const INITIAL_ITEMS = [
       { programId: "PROG-2026-01", programName: "Teambuilding FPT Software - 600 Khách", qty: 4, location: "Bãi Cháy, Hạ Long" }
     ],
     image: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&auto=format&fit=crop&q=80",
-    invoiceCost: 12000000
+    invoiceUrl: "https://images.unsplash.com/photo-1554415707-9e4966a604f7?w=400&auto=format&fit=crop&q=80",
+    invoiceCost: 12000000,
+    purchaseDate: "2026-05-10",
+    purchaseVendor: "Tổng Đại Lý Thuyền Phao Biển Đông",
+    purchasePrice: 12000000
   },
   {
     id: "A004",
@@ -274,7 +285,11 @@ const INITIAL_ITEMS = [
       { programId: "PROG-2026-03", programName: "Kickoff Sales Techcombank - 150 Khách", qty: 1, location: "Đồ Sơn, Hải Phòng" }
     ],
     image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&auto=format&fit=crop&q=80",
-    invoiceCost: 3200000
+    invoiceUrl: "https://images.unsplash.com/photo-1554415707-9e4966a604f7?w=400&auto=format&fit=crop&q=80",
+    invoiceCost: 3200000,
+    purchaseDate: "2026-08-01",
+    purchaseVendor: "Điện Cơ Toàn Phát Hà Nội",
+    purchasePrice: 3200000
   },
   {
     id: "A005",
@@ -517,6 +532,7 @@ const INITIAL_PROGRAMS = [
     startDate: "2026-10-30",
     endDate: "2026-11-02",
     status: "Đang vận hành",
+    receivedAndChecked: true, // Đã kiểm nhận đồ thành công
     leader: "Trần Thị Bình",
     phone: "0987654321",
     totalItems: 28,
@@ -536,6 +552,7 @@ const INITIAL_PROGRAMS = [
     startDate: "2026-10-30",
     endDate: "2026-10-31",
     status: "Đang vận hành",
+    receivedAndChecked: false, // Chưa kiểm đồ khi nhận
     leader: "Nguyễn Văn An",
     phone: "0912345678",
     totalItems: 272,
@@ -554,6 +571,7 @@ const INITIAL_PROGRAMS = [
     startDate: "2026-10-30",
     endDate: "2026-11-01",
     status: "Đang vận hành",
+    receivedAndChecked: false, // Chưa kiểm đồ khi nhận
     leader: "Lê Hoàng Nam",
     phone: "0905123456",
     totalItems: 3,
@@ -569,6 +587,7 @@ const INITIAL_PROGRAMS = [
     startDate: "2026-11-05",
     endDate: "2026-11-06",
     status: "Chuẩn bị tới",
+    receivedAndChecked: false,
     leader: "Trần Thị Bình",
     phone: "0987654321",
     totalItems: 0,
@@ -582,10 +601,54 @@ const INITIAL_PROGRAMS = [
     startDate: "2026-10-20",
     endDate: "2026-10-22",
     status: "Đã hoàn thành",
+    receivedAndChecked: true,
     leader: "Lê Hoàng Nam",
     phone: "0905123456",
     totalItems: 0,
     props: []
+  }
+];
+
+// Phiếu chuẩn bị đồ chờ gom hàng ra Vị trí chuẩn bị đồ
+const INITIAL_PREP_SLIPS = [
+  {
+    id: "PREP-20261030-01",
+    code: "CB_20261030_01",
+    tourId: "PROG-2026-02",
+    tourName: "Hội thao Tập đoàn Viettel - 400 Khách",
+    location: "Khu đô thị Ecopark, Hưng Yên",
+    eventDate: "2026-10-31",
+    warehouseId: "WH-MD",
+    warehouseName: "Kho Tổng Mỹ Đình (Hà Nội)",
+    status: "PENDING_STAGING", // 'PENDING_STAGING' (Chờ gom đồ) | 'STAGED' (Đã gom ra vị trí chuẩn bị)
+    stagedPhoto: null,
+    stagedAt: null,
+    items: [
+      { name: "Dây thừng kéo co 4 hướng phi 32", qty: 2, unit: "Bộ", shelf: "Kệ Game A1", tier: "1" },
+      { name: "Cờ tiêu chuẩn đánh dấu 4 màu", qty: 8, unit: "Chiếc", shelf: "Ống Cờ Sảnh A", tier: "1" },
+      { name: "Găng tay bảo hộ teambuilding", qty: 60, unit: "Đôi", shelf: "Thùng Vật Tư TH-01", tier: "1" },
+      { name: "Thảm cỏ nhân tạo lót chân phao 20x2m", qty: 2, unit: "Tấm", shelf: "Kệ Bạt Cuộn Sân Sau", tier: "1" }
+    ],
+    note: "Gom hàng trước 16h để kiểm đếm trước khi xe tải tới nhận."
+  },
+  {
+    id: "PREP-20261030-02",
+    code: "CB_20261030_02",
+    tourId: "PROG-2026-03",
+    tourName: "Kickoff Sales Techcombank - 150 Khách",
+    location: "Khu du lịch Đồ Sơn, Hải Phòng",
+    eventDate: "2026-11-01",
+    warehouseId: "WH-MD",
+    warehouseName: "Kho Tổng Mỹ Đình (Hà Nội)",
+    status: "PENDING_STAGING",
+    stagedPhoto: null,
+    stagedAt: null,
+    items: [
+      { name: "Máy thổi khí công suất lớn 1500W", qty: 1, unit: "Chiếc", shelf: "Kệ Máy Điện D1", tier: "1" },
+      { name: "Cuộn dây điện nguồn 20m", qty: 1, unit: "Cuộn", shelf: "Kệ Điện D01", tier: "2" },
+      { name: "Loa kéo di động công suất khủng 800W", qty: 1, unit: "Chiếc", shelf: "Phòng Âm Thanh", tier: "1" }
+    ],
+    note: "Đóng gói cẩn thận thiết bị âm thanh và dây điện."
   }
 ];
 

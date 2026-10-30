@@ -645,6 +645,9 @@
     <!-- ========================================================================= -->
     <section id="tab-panel-3" class="tab-panel hidden space-y-4">
       
+      <!-- Preparation Staging Slips Banner (Thông báo phiếu chuẩn bị gom đồ ra vị trí chuẩn bị) -->
+      <div id="tab3-prep-slips-banner" class="space-y-2"></div>
+
       <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         
         <!-- Project Info Bar (Image 3 Style) -->
@@ -909,11 +912,11 @@
     <!-- ========================================================================= -->
     <section id="tab-panel-5" class="tab-panel hidden space-y-4">
       
-      <!-- 2-Column Responsive Layout -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <!-- 2-Column Responsive Layout (Trái 1/3: Danh sách chương trình, Phải 2/3: Đạo cụ & Kiểm nhận) -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
         
-        <!-- Left Column: Active Tours List -->
-        <div class="lg:col-span-4 space-y-3">
+        <!-- Left Column: Active Tours List (1/3 màn hình trên máy tính) -->
+        <div class="col-span-12 md:col-span-4 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-900">Chương Trình Đang Vận Hành</h3>
             <span id="tab5-tours-count" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">0 Chương trình</span>
@@ -926,12 +929,12 @@
           </div>
 
           <div id="tab5-tour-cards" class="space-y-2.5">
-            <!-- dynamic tour cards -->
+            <!-- dynamic tour cards with status: Đang chạy vs Chưa kiểm đồ khi nhận -->
           </div>
         </div>
 
-        <!-- Right Column: Multi-warehouse Aggregation & Combo Grouping -->
-        <div class="lg:col-span-8 space-y-3">
+        <!-- Right Column: Multi-warehouse Aggregation & Checklist (2/3 màn hình) -->
+        <div class="col-span-12 md:col-span-8 space-y-3">
           
           <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
             
@@ -947,6 +950,9 @@
                 <span>Phân Chuyển Đồ Sang Chương Trình Khác</span>
               </button>
             </div>
+
+            <!-- Program Receipt Inspection & Checklist (Kiểm đếm nhận đồ tại chương trình) -->
+            <div id="tab5-receipt-checklist-container"></div>
 
             <!-- Incoming Field Transfer Inspection Banner -->
             <div id="tab5-incoming-transfers-banner" class="hidden"></div>
@@ -1512,10 +1518,16 @@
           <div class="flex items-center justify-between font-semibold text-slate-800">
             <span>1. Ảnh tập hợp đội ngũ phụ trách xuất đồ:</span>
           </div>
-          <button type="button" onclick="triggerCameraCapture('tab3-photo-team-preview-modal')" class="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5">
-            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
-            <span>Chụp / Tải Ảnh Đội Ngũ</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="triggerCameraCapture('tab3-photo-team-preview-modal')" class="flex-1 py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5 shadow-2xs">
+              <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+              <span>📸 Chụp Máy Ảnh</span>
+            </button>
+            <button type="button" onclick="triggerFileUpload('tab3-photo-team-preview-modal')" class="py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold flex items-center justify-center gap-1.5 shadow-2xs">
+              <i data-lucide="upload" class="w-4 h-4 text-slate-600"></i>
+              <span>📁 Gửi File</span>
+            </button>
+          </div>
           <div id="tab3-photo-team-preview-modal" class="hidden relative h-32 rounded-lg border border-slate-200 overflow-hidden">
             <img src="" alt="Team photo" class="w-full h-full object-cover">
           </div>
@@ -1524,12 +1536,18 @@
         <!-- Photo 2: Loaded Truck Photo -->
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
           <div class="flex items-center justify-between font-semibold text-slate-800">
-            <span>2. Ảnh nghiệm thu đạo cụ xếp gọn gàng trên xe tải <span class="text-rose-500">*</span></span>
+            <span>2. Ảnh nghiệm thu đạo cụ xếp gọn gàng trên xe tải <span class="text-rose-500 font-bold">* (Bắt buộc chụp)</span></span>
           </div>
-          <button type="button" onclick="triggerCameraCapture('tab3-photo-truck-preview')" class="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5">
-            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
-            <span>Chụp Ảnh Xe Tải & Đạo Cụ</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="triggerCameraCapture('tab3-photo-truck-preview')" class="flex-1 py-2 px-3 border border-sky-300 bg-sky-50/70 hover:bg-sky-100 text-sky-900 font-bold camera-trigger flex items-center justify-center gap-1.5 shadow-2xs">
+              <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+              <span>📸 Chụp Máy Ảnh Xe Tải</span>
+            </button>
+            <button type="button" onclick="triggerFileUpload('tab3-photo-truck-preview')" class="py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold flex items-center justify-center gap-1.5 shadow-2xs">
+              <i data-lucide="upload" class="w-4 h-4 text-slate-600"></i>
+              <span>📁 Gửi File</span>
+            </button>
+          </div>
           <div id="tab3-photo-truck-preview" class="hidden relative h-32 rounded-lg border border-slate-200 overflow-hidden">
             <img src="" alt="Truck photo" class="w-full h-full object-cover">
           </div>
@@ -1941,6 +1959,10 @@
           <span id="doc-code-text" class="text-sm font-bold text-slate-800">XK_20261028_01</span>
         </div>
         <div class="flex items-center gap-2">
+          <button onclick="exportSlipAsPDF()" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5 shadow-xs" title="Xuất file PDF hoặc in phiếu A4">
+            <i data-lucide="file-down" class="w-4 h-4"></i>
+            <span>Xuất File PDF</span>
+          </button>
           <button onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition flex items-center gap-1.5 shadow-xs">
             <i data-lucide="printer" class="w-4 h-4"></i>
             <span>In Phiếu A4</span>
@@ -1956,6 +1978,34 @@
         <!-- Rendered dynamically -->
       </div>
 
+    </div>
+  </div>
+
+  <!-- 11. MODAL: PHIẾU CHUẨN BỊ ĐỒ TẠI KHO (Gom hàng ra Vị trí chuẩn bị đồ) -->
+  <div id="modal-prep-slip" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-prep-slip')"></div>
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col z-10 shadow-2xl modal-content overflow-hidden border border-slate-200">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-amber-50/70">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+            <i data-lucide="clipboard-list" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+              Phiếu Chuẩn Bị Đồ Tại Kho
+              <span id="prep-slip-code-badge" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-200 text-amber-900">CB_...</span>
+            </h3>
+            <p id="prep-slip-subtitle" class="text-xs text-slate-500">Gom hàng từ các giá kệ ra Vị trí chuẩn bị đồ</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-prep-slip')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="prep-slip-modal-body" class="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 text-xs">
+        <!-- Rendered dynamically -->
+      </div>
     </div>
   </div>
 

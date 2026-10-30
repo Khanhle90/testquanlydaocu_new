@@ -28,7 +28,8 @@ const STORAGE_KEYS = {
   REPAIR_ORDERS: "ABA_REPAIR_ORDERS_V4",
   GSHEET_CONFIG: "ABA_GSHEET_CONFIG_V4",
   NOTIFICATIONS: "ABA_NOTIFICATIONS_V5",
-  FIELD_TRANSFERS: "ABA_FIELD_TRANSFERS_V5"
+  FIELD_TRANSFERS: "ABA_FIELD_TRANSFERS_V5",
+  PREP_SLIPS: "ABA_PREP_SLIPS_V5"
 };
 
 const ALL_CATEGORIES = [
@@ -126,10 +127,25 @@ function initState() {
   }
   state.gameCombos = state.combos;
   state.tours = loadFromStorage(STORAGE_KEYS.TOURS, INITIAL_TOURS);
+  // Ensure receivedAndChecked status on tours
+  (state.tours || []).forEach(t => {
+    if (t.receivedAndChecked === undefined) {
+      t.receivedAndChecked = (t.status === "Đang vận hành" || t.status === "Đang chạy");
+    }
+  });
+
+  // Ensure purchase info on items if missing
+  (state.items || []).forEach(it => {
+    if (!it.purchaseDate) it.purchaseDate = "2026-06-15";
+    if (!it.purchaseVendor) it.purchaseVendor = "Công ty TNHH Bạt Sự Kiện Thuận Phát";
+    if (!it.purchasePrice) it.purchasePrice = it.invoiceCost || 18500000;
+  });
+
   state.documents = loadFromStorage(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS);
   state.repairOrders = loadFromStorage(STORAGE_KEYS.REPAIR_ORDERS, INITIAL_REPAIR_ORDERS);
   state.notifications = loadFromStorage(STORAGE_KEYS.NOTIFICATIONS, typeof INITIAL_NOTIFICATIONS !== "undefined" ? INITIAL_NOTIFICATIONS : []);
   state.fieldTransfers = loadFromStorage(STORAGE_KEYS.FIELD_TRANSFERS, typeof INITIAL_FIELD_TRANSFERS !== "undefined" ? INITIAL_FIELD_TRANSFERS : []);
+  state.prepSlips = loadFromStorage(STORAGE_KEYS.PREP_SLIPS, typeof INITIAL_PREP_SLIPS !== "undefined" ? INITIAL_PREP_SLIPS : []);
   state.gsheetConfig = loadFromStorage(STORAGE_KEYS.GSHEET_CONFIG, {
     url: "https://script.google.com/macros/s/AKfycbz_aba_mock/exec",
     isConnected: true,
@@ -155,6 +171,7 @@ function saveState() {
   localStorage.setItem(STORAGE_KEYS.REPAIR_ORDERS, JSON.stringify(state.repairOrders));
   localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(state.notifications));
   localStorage.setItem(STORAGE_KEYS.FIELD_TRANSFERS, JSON.stringify(state.fieldTransfers));
+  localStorage.setItem(STORAGE_KEYS.PREP_SLIPS, JSON.stringify(state.prepSlips || []));
   localStorage.setItem(STORAGE_KEYS.GSHEET_CONFIG, JSON.stringify(state.gsheetConfig));
 }
 
@@ -1050,7 +1067,286 @@ function renderTab3() {
     dateEl.value = formatDate(new Date(), 'YYYY-MM-DD');
   }
 
+  renderTab3PrepSlipsBanner();
   renderTab3Table();
+}
+
+// =========================================================================
+// TAB 3: WAREHOUSE STAGING PREPARATION SLIPS (PHIẾU CHUẨN BỊ ĐỒ)
+// =========================================================================
+function renderTab3PrepSlipsBanner() {
+  const banner = document.getElementById("tab3-prep-slips-banner");
+  if (!banner) return;
+
+  const slips = state.prepSlips || [];
+  if (slips.length === 0) {
+    banner.innerHTML = "";
+    return;
+  }
+
+  const pendingSlips = slips.filter(s => s.status === "PENDING_STAGING");
+  const stagedSlips = slips.filter(s => s.status === "STAGED");
+
+  let pendingHtml = "";
+  if (pendingSlips.length > 0) {
+    pendingHtml = `
+      <div class="p-3.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/10 border-2 border-amber-400 rounded-2xl shadow-xs space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="p-1.5 rounded-lg bg-amber-500 text-white font-bold text-xs shadow-2xs">
+              <i data-lucide="bell" class="w-4 h-4"></i>
+            </span>
+            <div>
+              <div class="font-extrabold text-xs sm:text-sm text-amber-950 flex items-center gap-1.5">
+                <span>CÓ PHIẾU CHUẨN BỊ ĐỒ CẦN GOM RA "VỊ TRÍ CHUẨN BỊ ĐỒ"</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white">${pendingSlips.length} Phiếu</span>
+              </div>
+              <p class="text-[11px] text-amber-800">Thủ kho mở phiếu để gom đạo cụ từ các giá kệ tập kết về vị trí chuẩn bị trước khi xe tải tới nhận</p>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+          ${pendingSlips.map(slip => `
+            <div class="p-2.5 bg-white/95 rounded-xl border border-amber-300 flex items-center justify-between gap-2 shadow-2xs">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-black text-xs text-amber-900">${slip.code}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800">Chờ gom đồ</span>
+                </div>
+                <div class="font-bold text-xs text-slate-800 truncate mt-0.5">${slip.tourName}</div>
+                <div class="text-[10px] text-slate-500">📍 ${slip.location} • ${slip.items.length} mục đạo cụ</div>
+              </div>
+              <button type="button" onclick="openPrepSlipModal('${slip.id}')" class="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1">
+                <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                <span>Gom Đồ</span>
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  let stagedHtml = "";
+  if (stagedSlips.length > 0) {
+    stagedHtml = `
+      <div class="p-3 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-emerald-900 flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
+            <span>Đã gom xong ${stagedSlips.length} phiếu tại "Vị trí chuẩn bị đồ"</span>
+          </span>
+        </div>
+        <div class="space-y-1.5">
+          ${stagedSlips.map(slip => `
+            <div class="p-2 bg-white rounded-lg border border-emerald-200 flex items-center justify-between gap-2">
+              <div class="truncate">
+                <strong class="text-emerald-900">${slip.code}</strong> - <span class="font-medium text-slate-800">${slip.tourName}</span> <span class="text-slate-500">(${slip.items.length} món)</span>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" onclick="openPrepSlipModal('${slip.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold">
+                  Chi tiết
+                </button>
+                <button type="button" onclick="applyPrepSlipToExport('${slip.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                  <i data-lucide="zap" class="w-3 h-3"></i>
+                  <span>Nạp Nhanh Vào Phiếu Xuất</span>
+                </button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  banner.innerHTML = pendingHtml + stagedHtml;
+  if (window.lucide) lucide.createIcons();
+}
+
+function openPrepSlipModal(slipId) {
+  const slip = (state.prepSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+
+  const modal = document.getElementById("modal-prep-slip");
+  const badge = document.getElementById("prep-slip-code-badge");
+  const subtitle = document.getElementById("prep-slip-subtitle");
+  const body = document.getElementById("prep-slip-modal-body");
+
+  if (!modal || !body) return;
+
+  if (badge) badge.textContent = slip.code;
+  if (subtitle) subtitle.textContent = `${slip.tourName} • ${slip.warehouseName}`;
+
+  const isPending = (slip.status === "PENDING_STAGING");
+
+  body.innerHTML = `
+    <!-- Slip Information Header -->
+    <div class="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+      <div>
+        <div><strong class="text-slate-700">Chương trình / Dự án:</strong> <span class="text-sky-900 font-bold">${slip.tourName}</span></div>
+        <div class="mt-1"><strong class="text-slate-700">Địa điểm tổ chức:</strong> ${slip.location}</div>
+      </div>
+      <div>
+        <div><strong class="text-slate-700">Ngày diễn ra:</strong> ${slip.eventDate}</div>
+        <div class="mt-1"><strong class="text-slate-700">Kho chuẩn bị:</strong> ${slip.warehouseName}</div>
+      </div>
+      ${slip.note ? `
+        <div class="col-span-2 pt-1.5 border-t border-slate-200 text-slate-600 italic">
+          <strong>Ghi chú:</strong> ${slip.note}
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Items Picking Checklist Table -->
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between font-bold text-slate-800 text-xs">
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="list-checks" class="w-4 h-4 text-amber-600"></i>
+          <span>Danh Sách Đạo Cụ Cần Gom (${slip.items.length} món):</span>
+        </span>
+        <span class="text-[11px] font-normal text-slate-500">Gom từ các kệ về Vị trí chuẩn bị đồ</span>
+      </div>
+
+      <div class="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+            <tr>
+              <th class="py-2 px-2.5 w-10 text-center">STT</th>
+              <th class="py-2 px-3">Tên Đạo Cụ</th>
+              <th class="py-2 px-2 text-center w-16">SL Cần</th>
+              <th class="py-2 px-2 text-center w-14">ĐVT</th>
+              <th class="py-2 px-3">Kệ Hiện Tại</th>
+              <th class="py-2 px-2 text-center w-14">Tầng</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 bg-white">
+            ${slip.items.map((it, idx) => `
+              <tr class="hover:bg-amber-50/40 transition">
+                <td class="py-2 px-2.5 text-center text-slate-400 font-medium">${idx + 1}</td>
+                <td class="py-2 px-3 font-semibold text-slate-800">${it.name}</td>
+                <td class="py-2 px-2 text-center font-black text-amber-700">${it.qty}</td>
+                <td class="py-2 px-2 text-center text-slate-500">${it.unit}</td>
+                <td class="py-2 px-3 text-slate-700 font-medium">📍 ${it.shelf || 'Khu vực kho'}</td>
+                <td class="py-2 px-2 text-center text-slate-500">${it.tier || '1'}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Staging Confirmation Action / Result -->
+    ${isPending ? `
+      <div class="p-3.5 bg-amber-50 border border-amber-300 rounded-xl space-y-2.5">
+        <div class="text-xs text-amber-900">
+          <span class="font-bold">Quy trình 2 bước xác nhận gom đồ:</span>
+          <ol class="list-decimal list-inside text-[11px] text-amber-800 space-y-0.5 mt-1">
+            <li>Xác nhận đã mang toàn bộ đồ ra <strong>Vị trí chuẩn bị đồ</strong> trong kho.</li>
+            <li>Chụp ảnh vị trí chuẩn bị đồ để lưu bằng chứng nghiệm thu hoàn thành phiếu.</li>
+          </ol>
+        </div>
+        <button type="button" onclick="confirmStagingPrepSlip('${slip.id}')" class="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow flex items-center justify-center gap-2">
+          <i data-lucide="package-check" class="w-4 h-4"></i>
+          <span>📦 Xác Nhận Đã Gom Đồ Ra Vị Trí Chuẩn Bị</span>
+        </button>
+      </div>
+    ` : `
+      <div class="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-3">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold text-emerald-900 flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
+            <span>Đã gom xong ra "Vị trí chuẩn bị đồ" (${slip.stagedAt})</span>
+          </span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-200 text-emerald-900">Hoàn thành</span>
+        </div>
+        ${slip.stagedPhoto ? `
+          <div>
+            <span class="text-[11px] font-bold text-slate-700 block mb-1">Ảnh vị trí chuẩn bị đồ:</span>
+            <div class="rounded-xl border border-emerald-300 overflow-hidden h-40 bg-slate-100">
+              <img src="${slip.stagedPhoto}" alt="Vị trí chuẩn bị đồ" class="w-full h-full object-cover">
+            </div>
+          </div>
+        ` : ''}
+        <button type="button" onclick="applyPrepSlipToExport('${slip.id}')" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow flex items-center justify-center gap-2">
+          <i data-lucide="zap" class="w-4 h-4"></i>
+          <span>⚡ Nạp Toàn Bộ Danh Sách Vào Bảng Xuất Kho (Tab 3)</span>
+        </button>
+      </div>
+    `}
+  `;
+
+  modal.classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
+
+function confirmStagingPrepSlip(slipId) {
+  const slip = (state.prepSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+
+  // Bước 1: Hỏi xác nhận đã gom đồ ra vị trí chuẩn bị đồ chưa
+  const ans = confirm("1. Bạn đã lưu toàn bộ đồ ra vị trí chuẩn bị đồ cho chương trình chưa?\n\n(Bấm 'OK' nếu Rồi, 'Cancel' nếu Chưa)");
+  if (!ans) {
+    alert("Vui lòng hoàn tất việc gom đồ ra vị trí chuẩn bị đồ trước khi xác nhận!");
+    return;
+  }
+
+  // Bước 2: Chụp ảnh vị trí chuẩn bị đồ để xác nhận hoàn thành phiếu
+  showToast("Bước 2: Mở máy ảnh chụp vị trí chuẩn bị đồ để hoàn thành phiếu...", "info");
+  openLiveCamera((imgUrl) => {
+    slip.status = "STAGED";
+    slip.stagedPhoto = imgUrl;
+    slip.stagedAt = formatDateTime(new Date());
+
+    // Cập nhật vị trí lưu mới trong kho của các món đạo cụ này thành "Vị trí chuẩn bị đồ"
+    (slip.items || []).forEach(pItem => {
+      const item = state.items.find(i => i.name.toLowerCase() === pItem.name.toLowerCase());
+      if (item) {
+        if (!item.shelves) item.shelves = [];
+        const prepShelf = item.shelves.find(s => s.shelf === "Vị trí chuẩn bị đồ");
+        if (prepShelf) {
+          prepShelf.qty = (prepShelf.qty || 0) + pItem.qty;
+        } else {
+          item.shelves.push({ shelf: "Vị trí chuẩn bị đồ", tier: "Mặt sàn", qty: pItem.qty });
+        }
+      }
+    });
+
+    saveState();
+    renderTab3PrepSlipsBanner();
+    openPrepSlipModal(slipId);
+    showToast("✓ Đã gom đồ thành công! Vị trí các món trong kho đã được chuyển sang 'Vị trí chuẩn bị đồ'.", "success");
+  });
+}
+
+function applyPrepSlipToExport(slipId) {
+  const slip = (state.prepSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+
+  const nameInput = document.getElementById("tab3-project-name");
+  const locInput = document.getElementById("tab3-project-location");
+  const dateInput = document.getElementById("tab3-project-date");
+  const whSelect = document.getElementById("tab3-warehouse");
+
+  if (nameInput) nameInput.value = slip.tourName;
+  if (locInput) locInput.value = slip.location;
+  if (dateInput) dateInput.value = slip.eventDate;
+  if (whSelect && slip.warehouseId) whSelect.value = slip.warehouseId;
+
+  state.tab3Combos = [];
+  state.tab3DirectRows = (slip.items || []).map((it, idx) => ({
+    id: `DIR-${Date.now()}-${idx + 1}`,
+    name: it.name,
+    unit: it.unit,
+    qty: it.qty,
+    readyStock: it.qty,
+    shelf: "Vị trí chuẩn bị đồ",
+    itemId: null
+  }));
+
+  closeModal("modal-prep-slip");
+  switchTab(3);
+  renderTab3Table();
+  showToast(`Đã nạp toàn bộ danh sách đạo cụ từ phiếu chuẩn bị [${slip.code}] vào bảng xuất kho!`, "success");
 }
 
 function initTab3DirectRows() {
@@ -1310,6 +1606,67 @@ function addTab3GameCombo() {
       shelf: isAtThisWh ? (match.shelves || []).map(s => s.shelf).join(", ") : `Thuộc ${match.warehouseName}`
     };
   });
+
+  // Tự động thêm Máy Bơm Hơi và Dây Điện (bỏ qua ổ cắm) khi bộ game có đồ hơi
+  const INFLATABLE_KEYWORDS = [
+    "hơi", "phao", "bạt", "bơm hơi", "khí cầu", "bánh xe bạt",
+    "cổng hơi", "nhà hơi", "lâu đài hơi", "con lăn hơi", "bóng khổng lồ",
+    "núi hơi", "thuyền phao", "cầu phao"
+  ];
+  const hasInflatable = (comboPreset.category === "Đồ hơi") || (comboPreset.items || []).some(ci => {
+    const l = (ci.name || "").toLowerCase();
+    return INFLATABLE_KEYWORDS.some(kw => l.includes(kw));
+  });
+
+  if (hasInflatable) {
+    const hasBlower = comboChildItems.some(ci => {
+      const l = ci.name.toLowerCase();
+      return l.includes("máy thổi") || l.includes("máy bơm");
+    });
+    if (!hasBlower) {
+      const blowerMatch = state.items.find(i => i.name.toLowerCase().includes("máy thổi") && i.warehouseId === whId) ||
+        state.items.find(i => i.name.toLowerCase().includes("máy thổi")) || {
+          id: "A004",
+          name: "Máy thổi khí công suất lớn 1500W",
+          unit: "Chiếc",
+          ready: 0,
+          warehouseId: whId,
+          shelves: [{ shelf: "Kho", qty: 0 }]
+        };
+      comboChildItems.push({
+        itemId: blowerMatch.id,
+        name: "Máy thổi khí công suất lớn 1500W",
+        unit: "Chiếc",
+        qty: 1 * comboQty,
+        readyStock: (blowerMatch.warehouseId === whId) ? (blowerMatch.ready || 0) : 0,
+        shelf: (blowerMatch.warehouseId === whId) ? (blowerMatch.shelves || []).map(s => s.shelf).join(", ") : `Thuộc ${blowerMatch.warehouseName}`
+      });
+    }
+
+    const hasWire = comboChildItems.some(ci => {
+      const l = ci.name.toLowerCase();
+      return l.includes("dây điện") || l.includes("dây nguồn");
+    });
+    if (!hasWire) {
+      const wireMatch = state.items.find(i => i.name.toLowerCase().includes("dây điện") && i.warehouseId === whId) ||
+        state.items.find(i => i.name.toLowerCase().includes("dây điện")) || {
+          id: "A013",
+          name: "Cuộn dây điện nguồn 20m",
+          unit: "Cuộn",
+          ready: 0,
+          warehouseId: whId,
+          shelves: [{ shelf: "Kho", qty: 0 }]
+        };
+      comboChildItems.push({
+        itemId: wireMatch.id,
+        name: "Cuộn dây điện nguồn 20m",
+        unit: "Cuộn",
+        qty: 1 * comboQty,
+        readyStock: (wireMatch.warehouseId === whId) ? (wireMatch.ready || 0) : 0,
+        shelf: (wireMatch.warehouseId === whId) ? (wireMatch.shelves || []).map(s => s.shelf).join(", ") : `Thuộc ${wireMatch.warehouseName}`
+      });
+    }
+  }
 
   state.tab3Combos.push({
     id: `CMB-ROW-${Date.now()}`,
@@ -2505,8 +2862,65 @@ function initGlobalAutocompleteListeners() {
   });
 }
 
-// Camera & ImgBB upload helper
+// Camera Live Capture & Photo Management
+function applyCapturedPhoto(targetId, imgUrl) {
+  if (targetId === 'album-photo-capture') {
+    state.tab2AlbumPhotos.push(imgUrl);
+    renderTab2Album();
+    showToast("Đã chụp và lưu ảnh vào album!", "success");
+  } else if (targetId === 'tab3-team-photo-preview' || targetId === 'tab3-photo-team-preview-modal') {
+    state.tab3TeamPhoto = imgUrl;
+    const p1 = document.getElementById("tab3-team-photo-preview");
+    if (p1) {
+      const img = p1.querySelector("img");
+      if (img) img.src = imgUrl;
+      p1.classList.remove("hidden");
+    }
+    const p2 = document.getElementById("tab3-photo-team-preview-modal");
+    if (p2) {
+      const img = p2.querySelector("img");
+      if (img) img.src = imgUrl;
+      p2.classList.remove("hidden");
+    }
+    const s = document.getElementById("tab3-team-photo-status");
+    if (s) s.textContent = "🟢 Đã chụp ảnh đội";
+    showToast("Đã chụp ảnh đội ngũ thành công!", "success");
+  } else if (targetId === 'tab3-photo-truck-preview' || targetId === 'tab3TruckPhoto') {
+    state.tab3TruckPhoto = imgUrl;
+    const p = document.getElementById("tab3-photo-truck-preview");
+    if (p) {
+      const img = p.querySelector("img");
+      if (img) img.src = imgUrl;
+      p.classList.remove("hidden");
+    }
+    showToast("Đã chụp ảnh xe tải bốc hàng thành công!", "success");
+  } else if (targetId === 'tab4-unload-photo-preview') {
+    state.tab4UnloadPhoto = imgUrl;
+    const p = document.getElementById("tab4-unload-photo-preview");
+    if (p) {
+      const img = p.querySelector("img");
+      if (img) img.src = imgUrl;
+      p.classList.remove("hidden");
+    }
+    const s = document.getElementById("tab4-unload-photo-status");
+    if (s) s.textContent = "🟢 Đã chụp ảnh dỡ hàng";
+    showToast("Đã chụp ảnh dỡ xe về kho thành công!", "success");
+  } else if (targetId) {
+    setPreviewPhoto(targetId, imgUrl);
+    showToast("Đã chụp ảnh thành công!", "success");
+  }
+}
+
+// Directly opens live camera feed on device
 function triggerCameraCapture(targetPreviewElementId) {
+  state.activeCameraTargetId = targetPreviewElementId;
+  openLiveCamera((imgUrl) => {
+    applyCapturedPhoto(targetPreviewElementId, imgUrl);
+  });
+}
+
+// File picker for when user explicitly chooses to upload file
+function triggerFileUpload(targetPreviewElementId) {
   state.activeCameraTargetId = targetPreviewElementId;
   const input = document.getElementById("universal-camera-input");
   if (input) {
@@ -2519,25 +2933,11 @@ function handleCameraInputChange(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  showToast("Đang tối ưu & nén ảnh camera...", "info");
+  showToast("Đang tối ưu & nén ảnh...", "info");
 
   compressImage(file, 1280, 0.75, (compressedBlob) => {
     uploadToImgBB(compressedBlob, (imgUrl) => {
-      if (state.activeCameraTargetId === 'album-photo-capture') {
-        state.tab2AlbumPhotos.push(imgUrl);
-        renderTab2Album();
-      } else if (state.activeCameraTargetId === 'tab3-team-photo-preview') {
-        state.tab3TeamPhoto = imgUrl;
-        const p = document.getElementById("tab3-team-photo-preview");
-        if (p) {
-          p.querySelector("img").src = imgUrl;
-          p.classList.remove("hidden");
-        }
-        const s = document.getElementById("tab3-team-photo-status");
-        if (s) s.textContent = "🟢 Đã chụp ảnh đội";
-      } else if (state.activeCameraTargetId) {
-        setPreviewPhoto(state.activeCameraTargetId, imgUrl);
-      }
+      applyCapturedPhoto(state.activeCameraTargetId, imgUrl);
     });
   });
 }
@@ -2710,22 +3110,73 @@ function showToast(message, type = "info") {
 // =========================================================================
 // TAB 1 DETAIL MODAL (Item Details & Shelf Redistribution)
 // =========================================================================
+// =========================================================================
+// TAB 1 DETAIL MODAL (Item Details, Metrics, Purchase Info & Shelf Allocation)
+// =========================================================================
+let isItemDetailEditing = false;
+let activeItemDetailId = null;
+
 function openItemDetailModal(itemId) {
+  isItemDetailEditing = false;
+  activeItemDetailId = itemId;
+  renderItemDetailModal(itemId);
+
+  const modal = document.getElementById("modal-item-detail");
+  if (modal) modal.classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleItemDetailEditMode(itemId, enableEdit) {
+  isItemDetailEditing = enableEdit;
+  renderItemDetailModal(itemId);
+}
+
+function handleInvoiceUpload(event, itemId) {
+  const file = event.target.files[0];
+  if (!file) return;
+
   const item = state.items.find(i => i.id === itemId);
   if (!item) return;
 
-  const modal = document.getElementById("modal-item-detail");
+  if (file.type === "application/pdf") {
+    // PDF file simulated preview or object URL
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      item.invoiceUrl = e.target.result;
+      renderItemDetailModal(itemId);
+      showToast("Đã tải lên tệp PDF hóa đơn thành công!", "success");
+    };
+    reader.readAsDataURL(file);
+  } else {
+    // Image file
+    compressImage(file, 1280, 0.75, (compressedBlob) => {
+      uploadToImgBB(compressedBlob, (imgUrl) => {
+        item.invoiceUrl = imgUrl;
+        renderItemDetailModal(itemId);
+        showToast("Đã tải lên ảnh chụp hóa đơn thành công!", "success");
+      });
+    });
+  }
+}
+
+function renderItemDetailModal(itemId) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return;
+
   const codeBadge = document.getElementById("detail-code-badge");
   const nameEl = document.getElementById("detail-name");
   const contentEl = document.getElementById("detail-content");
 
-  if (!modal || !contentEl) return;
+  if (!contentEl) return;
 
-  codeBadge.textContent = item.code;
-  nameEl.textContent = item.name;
+  if (codeBadge) codeBadge.textContent = item.code;
+  if (nameEl) nameEl.textContent = item.name;
 
-  const inStock = (item.ready || 0) + (item.broken || 0);
-  const total = inStock + (item.inUse || 0);
+  const readyQty = item.ready || 0;
+  const inUseQty = item.inUse || 0;
+  const brokenQty = item.broken || 0;
+  const inStockQty = readyQty + brokenQty;
+  const totalQty = inStockQty + inUseQty;
 
   const toursList = (item.currentTours || []).map(t => `
     <div class="p-2 bg-amber-50/70 border border-amber-200 rounded-lg flex items-center justify-between">
@@ -2735,7 +3186,7 @@ function openItemDetailModal(itemId) {
       </div>
       <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-800 font-bold">${t.qty} ${item.unit}</span>
     </div>
-  `).join("") || '<p class="text-slate-400 italic">Hiện không có chương trình nào đang mượn món này</p>';
+  `).join("") || '<p class="text-slate-400 italic text-[11px]">Hiện không có chương trình nào đang mượn món này</p>';
 
   const brokenList = (item.brokenLocations || []).map(b => `
     <div class="p-2 bg-rose-50/70 border border-rose-200 rounded-lg flex items-start gap-2">
@@ -2748,91 +3199,210 @@ function openItemDetailModal(itemId) {
         <div class="text-[11px] text-slate-600 mt-0.5">${b.reason || 'Không rõ lý do'}</div>
       </div>
     </div>
-  `).join("") || '<p class="text-slate-400 italic">Không có báo cáo hư hỏng</p>';
+  `).join("") || '<p class="text-slate-400 italic text-[11px]">Không có báo cáo hư hỏng</p>';
 
   const shelfRowsHtml = (item.shelves || []).map((s, idx) => `
     <div class="flex items-center gap-2 shelf-row" data-idx="${idx}">
-      <input type="text" value="${s.shelf}" class="flex-1 p-2 bg-white border border-slate-200 rounded-md text-xs shelf-name-input" placeholder="Tên giá / kệ...">
-      <input type="number" min="0" value="${s.qty}" oninput="validateDetailShelfSum('${item.id}')" class="w-20 p-2 bg-white border border-slate-200 rounded-md text-xs text-center font-bold shelf-qty-input">
-      <button type="button" onclick="removeDetailShelfRow(this, '${item.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded">
-        <i data-lucide="trash-2" class="w-4 h-4"></i>
-      </button>
+      <input type="text" value="${s.shelf}" ${!isItemDetailEditing ? 'disabled' : ''} class="flex-1 p-2 bg-white border border-slate-200 rounded-md text-xs shelf-name-input disabled:bg-slate-50 disabled:text-slate-700" placeholder="Tên giá / kệ...">
+      <input type="number" min="0" value="${s.qty}" ${!isItemDetailEditing ? 'disabled' : ''} oninput="validateDetailShelfSum('${item.id}')" class="w-20 p-2 bg-white border border-slate-200 rounded-md text-xs text-center font-bold shelf-qty-input disabled:bg-slate-50 disabled:text-slate-700">
+      ${isItemDetailEditing ? `
+        <button type="button" onclick="removeDetailShelfRow(this, '${item.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      ` : ''}
     </div>
   `).join("");
 
   contentEl.innerHTML = `
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+    <!-- 5 Inventory Metric Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center shadow-2xs">
+        <div class="text-[10px] uppercase font-bold text-emerald-700">Số sẵn sàng</div>
+        <div class="text-lg font-black text-emerald-800 mt-0.5">${readyQty}</div>
+        <div class="text-[10px] text-emerald-600">${item.unit}</div>
+      </div>
+      <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center shadow-2xs">
+        <div class="text-[10px] uppercase font-bold text-amber-700">Đang đi</div>
+        <div class="text-lg font-black text-amber-800 mt-0.5">${inUseQty}</div>
+        <div class="text-[10px] text-amber-600">${item.unit}</div>
+      </div>
+      <div class="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-center shadow-2xs">
+        <div class="text-[10px] uppercase font-bold text-rose-700">Hỏng</div>
+        <div class="text-lg font-black text-rose-800 mt-0.5">${brokenQty}</div>
+        <div class="text-[10px] text-rose-600">${item.unit}</div>
+      </div>
+      <div class="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-center shadow-2xs">
+        <div class="text-[10px] uppercase font-bold text-sky-700">Tại kho</div>
+        <div class="text-lg font-black text-sky-800 mt-0.5">${inStockQty}</div>
+        <div class="text-[10px] text-sky-600">Sẵn + Hỏng</div>
+      </div>
+      <div class="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-center shadow-2xs">
+        <div class="text-[10px] uppercase font-bold text-purple-700">Tổng tài sản</div>
+        <div class="text-lg font-black text-purple-800 mt-0.5">${totalQty}</div>
+        <div class="text-[10px] text-purple-600">${item.unit}</div>
+      </div>
+    </div>
+
+    <!-- Specifications & Warehouse Fixed Info -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
       <div class="sm:col-span-1">
         <img src="${item.image || 'https://images.unsplash.com/photo-1513151233558-d860c5398176?w=300'}" alt="${item.name}" class="w-full h-36 object-cover rounded-lg border border-slate-200">
       </div>
-      <div class="sm:col-span-2 space-y-1.5">
-        <div><strong class="text-slate-700">Thông số kỹ thuật:</strong> <span class="text-slate-600">${item.specs || 'N/A'}</span></div>
-        <div><strong class="text-slate-700">Mục đích sử dụng:</strong> <span class="text-slate-600">${item.purpose || 'N/A'}</span></div>
-        <div><strong class="text-slate-700">Đơn vị tính:</strong> <span class="text-slate-600 font-bold">${item.unit}</span></div>
-        <div><strong class="text-slate-700">Định mức tồn tối thiểu:</strong> <span class="text-slate-600">${item.minStock || 0} ${item.unit}</span></div>
-        <div class="pt-1 flex items-center gap-2">
+      <div class="sm:col-span-2 space-y-2">
+        ${isItemDetailEditing ? `
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-0.5">Tên đạo cụ:</label>
+            <input type="text" id="detail-edit-name" value="${item.name}" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-0.5">Thông số kỹ thuật:</label>
+            <input type="text" id="detail-edit-specs" value="${item.specs || ''}" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-0.5">Mục đích sử dụng:</label>
+            <input type="text" id="detail-edit-purpose" value="${item.purpose || ''}" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+          </div>
+        ` : `
+          <div><strong class="text-slate-700">Thông số kỹ thuật:</strong> <span class="text-slate-600">${item.specs || 'N/A'}</span></div>
+          <div><strong class="text-slate-700">Mục đích sử dụng:</strong> <span class="text-slate-600">${item.purpose || 'N/A'}</span></div>
+          <div><strong class="text-slate-700">Đơn vị tính:</strong> <span class="text-slate-700 font-bold">${item.unit}</span></div>
+          <div><strong class="text-slate-700">Định mức tồn tối thiểu:</strong> <span class="text-slate-600">${item.minStock || 0} ${item.unit}</span></div>
+        `}
+        <div class="pt-1 flex flex-wrap items-center gap-2">
           <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-100 text-sky-800">Kho: ${item.warehouseName} (Khóa cố định)</span>
-          <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-800">Tổng tài sản: ${total} (Khóa cố định)</span>
+          <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-800">Tổng tài sản: ${totalQty} (Khóa cố định)</span>
         </div>
       </div>
     </div>
 
+    <!-- Purchase Information Section (Thời gian mua, Đơn vị mua, Giá mua, Hóa đơn) -->
+    <div class="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 space-y-2.5 text-xs">
+      <div class="flex items-center justify-between font-bold text-blue-950">
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="receipt" class="w-4 h-4 text-blue-600"></i>
+          <span>Thông Tin Mua Hàng & Hóa Đơn (Gần nhất)</span>
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Thời gian mua (gần nhất):</label>
+          ${isItemDetailEditing ? `
+            <input type="date" id="detail-edit-purchasedate" value="${item.purchaseDate || ''}" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+          ` : `
+            <div class="p-2 bg-white rounded-lg border border-slate-200 font-semibold text-slate-800">${item.purchaseDate || 'Chưa cập nhật'}</div>
+          `}
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Đơn vị mua (gần nhất):</label>
+          ${isItemDetailEditing ? `
+            <input type="text" id="detail-edit-purchasevendor" value="${item.purchaseVendor || ''}" placeholder="Tên công ty / nhà cung cấp..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+          ` : `
+            <div class="p-2 bg-white rounded-lg border border-slate-200 font-semibold text-slate-800 truncate">${item.purchaseVendor || 'Chưa cập nhật'}</div>
+          `}
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Giá mua (gần nhất):</label>
+          ${isItemDetailEditing ? `
+            <input type="number" id="detail-edit-purchaseprice" value="${item.purchasePrice || 0}" step="1000" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-sky-800">
+          ` : `
+            <div class="p-2 bg-white rounded-lg border border-slate-200 font-bold text-sky-800">${item.purchasePrice ? item.purchasePrice.toLocaleString('vi-VN') + ' đ' : 'Chưa cập nhật'}</div>
+          `}
+        </div>
+      </div>
+
+      <!-- Invoice Document / Photo -->
+      <div class="pt-1.5 border-t border-blue-200/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold text-slate-700">Ảnh / File Hóa đơn:</span>
+          ${item.invoiceUrl ? `
+            <a href="${item.invoiceUrl}" target="_blank" class="px-2.5 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold text-[11px] flex items-center gap-1 transition">
+              <i data-lucide="file-check" class="w-3.5 h-3.5 text-blue-700"></i>
+              <span>Xem Hóa Đơn / Chứng Từ</span>
+            </a>
+          ` : `
+            <span class="text-[11px] text-slate-400 italic">Chưa có ảnh/tệp hóa đơn</span>
+          `}
+        </div>
+
+        ${isItemDetailEditing ? `
+          <div class="flex items-center gap-2">
+            <label class="px-2.5 py-1 rounded-lg bg-white border border-blue-300 hover:bg-blue-50 text-blue-800 font-bold text-xs cursor-pointer flex items-center gap-1 shadow-2xs">
+              <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+              <span>Tải Ảnh / File PDF</span>
+              <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleInvoiceUpload(event, '${item.id}')">
+            </label>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- Active Tour Borrowing Details -->
     <div class="space-y-1.5">
-      <div class="font-bold text-slate-800 flex items-center gap-1.5">
+      <div class="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
         <i data-lucide="truck" class="w-4 h-4 text-amber-600"></i>
         <span>Đang Sử Dụng Ở Đâu (Chương trình):</span>
       </div>
       <div class="space-y-1.5">${toursList}</div>
     </div>
 
+    <!-- Broken Items Details -->
     <div class="space-y-1.5">
-      <div class="font-bold text-slate-800 flex items-center gap-1.5">
+      <div class="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
         <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i>
         <span>Báo Cáo Đồ Hỏng & Vị Trí Lưu Đồ Hỏng:</span>
       </div>
       <div class="space-y-1.5">${brokenList}</div>
     </div>
 
-    <div class="p-3.5 bg-sky-50/50 rounded-xl border border-sky-200 space-y-3">
+    <!-- Shelves Allocation -->
+    <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
       <div class="flex items-center justify-between">
         <div>
-          <span class="font-bold text-sky-900">Điều Chỉnh Phân Bổ Giá Kệ & Cập Nhật Thông Tin</span>
-          <p class="text-[11px] text-sky-700">Khóa cố định Tên kho và Tổng tại kho (${inStock}). Bắt buộc tổng các kệ phải khớp 100%.</p>
+          <span class="font-bold text-slate-900 text-xs">Phân Bổ Vị Trí Giá Kệ Trong Kho</span>
+          <p class="text-[11px] text-slate-500">Khóa cố định Tên kho và Tổng tại kho (${inStockQty}). Bắt buộc tổng các kệ phải khớp 100%.</p>
         </div>
-        <button type="button" onclick="addDetailShelfRow('${item.id}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-sky-600 text-white hover:bg-sky-700">
-          + Thêm Kệ
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div>
-          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Tên đạo cụ:</label>
-          <input type="text" id="detail-edit-name" value="${item.name}" class="w-full p-2 bg-white border border-slate-200 rounded-md text-xs">
-        </div>
-        <div>
-          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Thông số kỹ thuật:</label>
-          <input type="text" id="detail-edit-specs" value="${item.specs || ''}" class="w-full p-2 bg-white border border-slate-200 rounded-md text-xs">
-        </div>
+        ${isItemDetailEditing ? `
+          <button type="button" onclick="addDetailShelfRow('${item.id}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-sky-600 text-white hover:bg-sky-700 shadow-2xs">
+            + Thêm Kệ
+          </button>
+        ` : ''}
       </div>
 
       <div id="detail-shelves-container" class="space-y-2">
         ${shelfRowsHtml}
       </div>
 
-      <div class="flex items-center justify-between pt-2 border-t border-sky-200 text-xs">
-        <span>Tổng số lượng các kệ hiện tại: <strong id="detail-shelf-sum">${inStock}</strong> / Mục tiêu tại kho: <strong>${inStock}</strong></span>
+      <div class="flex items-center justify-between pt-2 border-t border-slate-200 text-xs">
+        <span>Tổng số lượng các kệ hiện tại: <strong id="detail-shelf-sum">${inStockQty}</strong> / Mục tiêu tại kho: <strong>${inStockQty}</strong></span>
         <span id="detail-shelf-status" class="px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">Khớp 100%</span>
       </div>
+    </div>
 
-      <div class="flex justify-end pt-2">
-        <button type="button" onclick="saveItemDetailChanges('${item.id}', ${inStock})" class="px-4 py-2 bg-sky-600 text-white rounded-lg font-bold hover:bg-sky-700 transition">
-          Lưu Thay Đổi
+    <!-- Modal Action Buttons (View Mode vs Edit Mode) -->
+    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+      ${!isItemDetailEditing ? `
+        <button type="button" onclick="toggleItemDetailEditMode('${item.id}', true)" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow flex items-center gap-1.5 text-xs sm:text-sm">
+          <i data-lucide="edit-3" class="w-4 h-4"></i>
+          <span>✏️ Sửa Thông Tin Đạo Cụ</span>
         </button>
-      </div>
+        <button type="button" onclick="closeModal('modal-item-detail')" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl transition text-xs sm:text-sm">
+          Đóng
+        </button>
+      ` : `
+        <button type="button" onclick="toggleItemDetailEditMode('${item.id}', false)" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl transition text-xs sm:text-sm">
+          Hủy Bỏ
+        </button>
+        <button type="button" onclick="saveItemDetailChanges('${item.id}', ${inStockQty})" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow flex items-center gap-1.5 text-xs sm:text-sm">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>💾 Lưu Thay Đổi</span>
+        </button>
+      `}
     </div>
   `;
 
-  modal.classList.remove("hidden");
   if (window.lucide) lucide.createIcons();
 }
 
@@ -2902,9 +3472,17 @@ function saveItemDetailChanges(itemId, targetInStock) {
 
   const newName = document.getElementById("detail-edit-name")?.value.trim();
   const newSpecs = document.getElementById("detail-edit-specs")?.value.trim();
+  const newPurpose = document.getElementById("detail-edit-purpose")?.value.trim();
+  const newPDate = document.getElementById("detail-edit-purchasedate")?.value;
+  const newPVendor = document.getElementById("detail-edit-purchasevendor")?.value.trim();
+  const newPPrice = Number(document.getElementById("detail-edit-purchaseprice")?.value || 0);
 
   if (newName) item.name = newName;
   if (newSpecs) item.specs = newSpecs;
+  if (newPurpose) item.purpose = newPurpose;
+  if (newPDate) item.purchaseDate = newPDate;
+  if (newPVendor) item.purchaseVendor = newPVendor;
+  if (newPPrice >= 0) item.purchasePrice = newPPrice;
 
   const newShelves = [];
   document.querySelectorAll("#detail-shelves-container .shelf-row").forEach(row => {
@@ -2916,10 +3494,11 @@ function saveItemDetailChanges(itemId, targetInStock) {
   });
 
   item.shelves = newShelves;
+  isItemDetailEditing = false;
   saveState();
-  closeModal("modal-item-detail");
+  renderItemDetailModal(itemId);
   renderTab1();
-  showToast(`Đã cập nhật thông tin và phân bổ giá kệ cho [${item.name}] thành công!`, "success");
+  showToast(`Đã lưu thay đổi thông tin & phân bổ giá kệ cho [${item.name}] thành công!`, "success");
 }
 
 // =========================================================================
@@ -2932,7 +3511,7 @@ function renderTab5() {
   const searchQuery = (searchInput?.value || "").trim().toLowerCase();
 
   // ONLY programs currently running ("Đang vận hành" or "Đang chạy")
-  const runningTours = state.tours.filter(t => t.status === "Đang vận hành" || t.status === "Đang chạy");
+  const runningTours = state.tours.filter(t => t.status === "Đang vận hành" || t.status === "Đang chạy" || (t.status && t.status.includes("Đang chạy")));
 
   // Search filter
   const filteredTours = runningTours.filter(t => {
@@ -2957,11 +3536,24 @@ function renderTab5() {
   if (cardsContainer) {
     cardsContainer.innerHTML = filteredTours.map(t => {
       const isSelected = (t.id === state.selectedTourIdTab5);
+      const isChecked = (t.receivedAndChecked === true);
+      const statusBadge = isChecked ? `
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0 flex items-center gap-1 shadow-2xs">
+          <i data-lucide="check" class="w-3 h-3"></i>
+          <span>Đang chạy</span>
+        </span>
+      ` : `
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0 flex items-center gap-1 animate-pulse">
+          <i data-lucide="clock" class="w-3 h-3"></i>
+          <span>Chưa kiểm đồ khi nhận</span>
+        </span>
+      `;
+
       return `
         <div onclick="selectTab5Tour('${t.id}')" class="p-3.5 rounded-xl border cursor-pointer transition item-card ${isSelected ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200 hover:border-sky-300'}">
           <div class="flex items-center justify-between gap-1 mb-1">
             <span class="font-bold text-xs ${isSelected ? 'text-sky-900' : 'text-slate-900'} truncate">${t.name}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 shrink-0">Đang chạy</span>
+            ${statusBadge}
           </div>
           <div class="text-[11px] text-slate-500 space-y-0.5">
             <div>📍 ${t.location}</div>
@@ -2993,10 +3585,238 @@ function toggleCollapseTab5Combo(comboId) {
   renderTab5SelectedTourProps(selectedTour);
 }
 
+// Interactive Receipt Inspection & Verification for Programs
+function renderTab5ReceiptChecklist(tour) {
+  const container = document.getElementById("tab5-receipt-checklist-container");
+  if (!container) return;
+
+  if (!tour) {
+    container.innerHTML = "";
+    return;
+  }
+
+  // Ensure receipt checklist is initialized from tour props
+  if (!tour.receiptChecklist || tour.receiptChecklist.length === 0) {
+    tour.receiptChecklist = (tour.props || []).map(p => ({
+      name: p.name,
+      unit: p.unit,
+      dispatchedQty: p.qty,
+      receivedQty: p.qty,
+      checked: tour.receivedAndChecked === true
+    }));
+  }
+
+  if (tour.receivedAndChecked === true) {
+    container.innerHTML = `
+      <div class="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2 mb-3 shadow-2xs">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="font-extrabold text-xs sm:text-sm text-emerald-900">✓ Đã kiểm đếm nhận đủ đồ tại hiện trường (Đang chạy)</span>
+          </div>
+          <button type="button" onclick="recheckTourReceipt('${tour.id}')" class="px-2.5 py-1 text-[11px] font-bold bg-white text-emerald-800 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition shadow-2xs flex items-center gap-1">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+            <span>Kiểm đếm lại</span>
+          </button>
+        </div>
+        <div class="text-[11px] text-emerald-700 flex flex-wrap items-center gap-3">
+          <span>Người nhận phụ trách: <strong>${tour.leader}</strong> (${tour.phone})</span>
+          <span>•</span>
+          <span>Thời gian xác nhận: <strong>${tour.checkedAt || 'Đã kiểm tra'}</strong></span>
+        </div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // Not yet checked - render interactive checklist table
+  container.innerHTML = `
+    <div class="p-3.5 bg-amber-50/90 border-2 border-amber-300 rounded-xl space-y-3 mb-3 shadow-xs">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-amber-200">
+        <div>
+          <div class="flex items-center gap-1.5 font-extrabold text-xs sm:text-sm text-amber-950">
+            <i data-lucide="clipboard-check" class="w-4 h-4 text-amber-600"></i>
+            <span>Biên Bản Kiểm Đếm Nhận Đồ Tại Hiện Trường (Chưa kiểm đồ khi nhận)</span>
+          </div>
+          <p class="text-[11px] text-amber-800">Người nhận: <strong>${tour.leader}</strong> (${tour.phone}) • Vui lòng đếm lại số lượng thực tế nhận được</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="tickAllTourReceiptItems('${tour.id}')" class="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 transition shadow-2xs flex items-center gap-1">
+            <i data-lucide="check-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+            <span>Tích Chọn Đủ 100%</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-amber-200 bg-white overflow-hidden shadow-2xs">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-amber-100/60 text-slate-700 border-b border-amber-200 font-bold">
+            <tr>
+              <th class="py-2 px-2 text-center w-8">Đủ</th>
+              <th class="py-2 px-2 w-8 text-center">STT</th>
+              <th class="py-2 px-3">Tên Đạo Cụ</th>
+              <th class="py-2 px-2 text-center w-14">ĐVT</th>
+              <th class="py-2 px-2 text-center w-20">SL Gửi</th>
+              <th class="py-2 px-2 text-center w-24">SL Nhận</th>
+              <th class="py-2 px-3 text-center w-24">Trạng Thái</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-amber-100">
+            ${(tour.receiptChecklist || []).map((it, idx) => {
+              const diff = Number(it.receivedQty || 0) - Number(it.dispatchedQty || 0);
+              const isExact = (diff === 0);
+              const isShort = (diff < 0);
+              return `
+                <tr class="hover:bg-amber-50/40 transition ${!it.checked ? 'bg-amber-50/30' : ''}">
+                  <td class="py-2 px-2 text-center">
+                    <input type="checkbox" ${it.checked ? 'checked' : ''} onchange="toggleTourReceiptCheck('${tour.id}', ${idx}, this.checked)" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer">
+                  </td>
+                  <td class="py-2 px-2 text-center text-slate-400 font-medium text-[11px]">${idx + 1}</td>
+                  <td class="py-2 px-3 font-semibold text-slate-800">${it.name}</td>
+                  <td class="py-2 px-2 text-center text-slate-500">${it.unit}</td>
+                  <td class="py-2 px-2 text-center font-bold text-slate-700">${it.dispatchedQty}</td>
+                  <td class="py-2 px-2 text-center">
+                    <input type="number" min="0" value="${it.receivedQty}" oninput="updateTourReceiptQty('${tour.id}', ${idx}, this.value)" class="w-16 p-1 text-center font-extrabold text-xs rounded border ${isShort ? 'border-rose-400 text-rose-700 bg-rose-50' : 'border-slate-300 text-slate-900 bg-white'} focus:outline-none focus:ring-1 focus:ring-amber-500">
+                  </td>
+                  <td class="py-2 px-3 text-center">
+                    ${isExact ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Đủ 100%</span>` :
+                      isShort ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white animate-pulse">Thiếu ${Math.abs(diff)}</span>` :
+                      `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Thừa ${diff}</span>`}
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+        <div class="text-[11px] text-amber-900 font-medium">
+          * Nếu nhận đủ bấm xác nhận để chuyển trạng thái sang "Đang chạy". Nếu thiếu đồ hệ thống sẽ tự động gửi cảnh báo chi tiết đến người gửi và thủ kho.
+        </div>
+        <button type="button" onclick="confirmTourReceipt('${tour.id}')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow flex items-center justify-center gap-1.5 shrink-0">
+          <i data-lucide="check-circle" class="w-4 h-4"></i>
+          <span>Xác Nhận Nhận Đồ Thành Công</span>
+        </button>
+      </div>
+    </div>
+  `;
+  if (window.lucide) lucide.createIcons();
+}
+
+function tickAllTourReceiptItems(tourId) {
+  const tour = state.tours.find(t => t.id === tourId);
+  if (!tour || !tour.receiptChecklist) return;
+
+  tour.receiptChecklist.forEach(it => {
+    it.checked = true;
+    it.receivedQty = it.dispatchedQty;
+  });
+  saveState();
+  renderTab5ReceiptChecklist(tour);
+  showToast("Đã tích chọn đủ 100% tất cả đạo cụ!", "success");
+}
+
+function toggleTourReceiptCheck(tourId, idx, checked) {
+  const tour = state.tours.find(t => t.id === tourId);
+  if (!tour || !tour.receiptChecklist || !tour.receiptChecklist[idx]) return;
+
+  tour.receiptChecklist[idx].checked = checked;
+  if (checked) {
+    tour.receiptChecklist[idx].receivedQty = tour.receiptChecklist[idx].dispatchedQty;
+  }
+  saveState();
+  renderTab5ReceiptChecklist(tour);
+}
+
+function updateTourReceiptQty(tourId, idx, val) {
+  const tour = state.tours.find(t => t.id === tourId);
+  if (!tour || !tour.receiptChecklist || !tour.receiptChecklist[idx]) return;
+
+  const num = Math.max(0, Number(val || 0));
+  tour.receiptChecklist[idx].receivedQty = num;
+  tour.receiptChecklist[idx].checked = (num === tour.receiptChecklist[idx].dispatchedQty);
+  saveState();
+  renderTab5ReceiptChecklist(tour);
+}
+
+function recheckTourReceipt(tourId) {
+  const tour = state.tours.find(t => t.id === tourId);
+  if (!tour) return;
+
+  tour.receivedAndChecked = false;
+  saveState();
+  renderTab5();
+  showToast("Đã mở lại biên bản kiểm đếm nhận đồ!", "info");
+}
+
+function confirmTourReceipt(tourId) {
+  const tour = state.tours.find(t => t.id === tourId);
+  if (!tour) return;
+
+  const checklist = tour.receiptChecklist || [];
+  const shortages = [];
+
+  checklist.forEach(it => {
+    const diff = Number(it.receivedQty || 0) - Number(it.dispatchedQty || 0);
+    if (diff < 0) {
+      shortages.push({
+        name: it.name,
+        unit: it.unit,
+        dispatched: it.dispatchedQty,
+        received: it.receivedQty,
+        missing: Math.abs(diff)
+      });
+    }
+  });
+
+  tour.receivedAndChecked = true;
+  tour.checkedAt = formatDateTime(new Date());
+
+  if (shortages.length === 0) {
+    tour.status = "Đang chạy";
+    // Notify keeper and sender
+    const notif = {
+      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: "RECEIPT_SUCCESS",
+      title: `Đã nhận đủ đồ: [${tour.name}]`,
+      message: `${tour.leader} đã kiểm đếm và xác nhận nhận ĐỦ 100% toàn bộ ${tour.props ? tour.props.length : 0} loại đạo cụ tại hiện trường. Chương trình chuyển trạng thái "Đang chạy".`,
+      status: "UNREAD",
+      createdAt: formatDateTime(new Date())
+    };
+    if (!state.notifications) state.notifications = [];
+    state.notifications.unshift(notif);
+    saveState();
+    renderTab5();
+    renderNotifications();
+    showToast(`✓ Đã xác nhận nhận ĐỦ 100% đồ cho chương trình [${tour.name}]! Tin báo đã được gửi đến người chuyển và thủ kho.`, "success");
+  } else {
+    tour.status = "Đang chạy";
+    const shortageDetails = shortages.map(s => `• ${s.name}: Thiếu ${s.missing} ${s.unit} (Gửi ${s.dispatched}, thực nhận ${s.received})`).join("\n");
+    const notif = {
+      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: "SHORTAGE_ALERT",
+      title: `⚠️ CẢNH BÁO THIẾU ĐỒ TẠI [${tour.name}]`,
+      message: `${tour.leader} đã kiểm đếm và báo THIẾU ${shortages.length} loại đạo cụ:\n${shortageDetails}`,
+      status: "UNREAD",
+      createdAt: formatDateTime(new Date())
+    };
+    if (!state.notifications) state.notifications = [];
+    state.notifications.unshift(notif);
+    saveState();
+    renderTab5();
+    renderNotifications();
+    alert(`CẢNH BÁO THIẾU ĐỒ:\nBạn đã ghi nhận thiếu ${shortages.length} mục đạo cụ:\n\n${shortageDetails}\n\nHệ thống đã tự động gửi thông báo chi tiết danh sách đồ thiếu cho người gửi và Thủ kho!`);
+  }
+}
+
 function renderTab5SelectedTourProps(tour) {
   const titleEl = document.getElementById("tab5-selected-tour-title");
   const subEl = document.getElementById("tab5-selected-tour-subtitle");
   const container = document.getElementById("tab5-props-container");
+
+  renderTab5ReceiptChecklist(tour);
 
   if (!tour) {
     if (titleEl) titleEl.textContent = "Chưa chọn chương trình";
@@ -3245,14 +4065,18 @@ function renderTransferModalUI() {
       const matchedTour = state.tours.find(t => t.id === destId);
       const newObj = transferNewTourData[dIdx] || { name: "", location: "", leader: "", phone: "" };
 
+      // Tự động loại trừ các chương trình đã được chọn ở nơi nhận khác (tránh chọn trùng nhầm lẫn)
+      const otherSelectedIds = transferDestinations.filter((id, i) => i !== dIdx && !String(id).startsWith("__NEW"));
+      const eligibleTours = otherTours.filter(t => !otherSelectedIds.includes(t.id));
+
       return `
         <div class="p-2.5 bg-white rounded-xl border border-purple-200 space-y-2 shadow-2xs">
           <div class="flex items-center gap-2">
             <span class="font-extrabold text-purple-900 text-xs shrink-0 w-20">Nơi nhận ${dIdx + 1}:</span>
             
             <select onchange="updateTransferDestinationTour(${dIdx}, this.value)" class="flex-1 p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800">
-              <optgroup label="-- Chương trình đang vận hành --">
-                ${otherTours.map(t => `<option value="${t.id}" ${t.id === destId ? 'selected' : ''}>${t.name} (Địa điểm: ${t.location})</option>`).join("")}
+              <optgroup label="-- Chương trình tiếp nhận (Đã tự động loại trừ nơi nhận khác) --">
+                ${eligibleTours.map(t => `<option value="${t.id}" ${t.id === destId ? 'selected' : ''}>${escapeHtml(t.name)} (Địa điểm: ${escapeHtml(t.location)})</option>`).join("")}
               </optgroup>
               <optgroup label="-- Hoặc tạo chương trình mới --">
                 <option value="__NEW_${dIdx}__" ${isNew ? 'selected' : ''}>➕ [Nhập chương trình tiếp nhận mới...]</option>
@@ -4579,6 +5403,10 @@ function getDocBadgeColor(type) {
   }
 }
 
+function exportSlipAsPDF() {
+  window.print();
+}
+
 function openDocumentPrintModal(docId) {
   const doc = state.documents.find(d => d.id === docId);
   if (!doc) return;
@@ -4605,6 +5433,9 @@ function openDocumentPrintModal(docId) {
   const keeperUser = (state.users || []).find(u => u.name === keeperName || u.roleType === 'KEEPER') || (state.users && state.users[0]);
   const keeperAvatar = doc.keeperAvatar || (isKeeperApproved ? keeperUser?.avatar : '');
 
+  const matchingTour = (state.tours || []).find(t => t.name === doc.tourName || t.id === doc.tourId);
+  const eventDate = doc.eventDate || matchingTour?.startDate || doc.date || formatDate(new Date(), 'YYYY-MM-DD');
+
   const photosHtml = (doc.photos || []).map(p => `
     <div class="rounded-lg overflow-hidden border border-slate-300">
       <img src="${p}" class="w-full h-32 object-cover">
@@ -4629,18 +5460,28 @@ function openDocumentPrintModal(docId) {
     </div>
 
     <div class="text-center py-2">
-      <h1 class="text-lg font-extrabold uppercase text-slate-900">PHIẾU ${doc.type.toUpperCase()}</h1>
-      <p class="text-xs text-slate-600 italic">Dự án: ${doc.tourName}</p>
+      <h1 class="text-xl font-black uppercase text-slate-900 tracking-wide">PHIẾU ${doc.type.toUpperCase()}</h1>
+      <div class="text-base sm:text-lg font-black text-slate-800 mt-1 uppercase">
+        DỰ ÁN: <span class="text-sky-800">${doc.tourName || 'Dự án Teambuilding & Sự kiện ABA'}</span>
+      </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 text-xs p-3 bg-slate-50 rounded-lg border border-slate-200">
+    <!-- Structured Metadata with exact line arrangement requested -->
+    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs p-3.5 bg-slate-50 rounded-xl border border-slate-200">
       <div>
         <div><strong class="text-slate-700">Kho thực hiện:</strong> ${doc.warehouseName}</div>
-        <div><strong class="text-slate-700">Địa điểm / Lộ trình:</strong> ${doc.location}</div>
       </div>
       <div>
         <div><strong class="text-slate-700">Người lập phiếu:</strong> ${doc.creator}</div>
-        <div><strong class="text-slate-700">Ghi chú:</strong> ${doc.note || 'Không'}</div>
+      </div>
+      <div>
+        <div><strong class="text-slate-700">Địa điểm / Lộ trình:</strong> ${doc.location}</div>
+      </div>
+      <div>
+        <div><strong class="text-slate-700">Ngày thực hiện chương trình:</strong> ${eventDate}</div>
+      </div>
+      <div class="col-span-2 pt-2 border-t border-slate-200 text-slate-700">
+        <strong>Ghi chú:</strong> ${doc.note || 'Không có ghi chú'}
       </div>
     </div>
 
@@ -4679,60 +5520,63 @@ function openDocumentPrintModal(docId) {
       </div>
     ` : ''}
 
-    <!-- 5-Column Printable Signatures Layout in Exact Specified Order -->
+    <!-- 5-Column Printable Signatures Layout in Exact Specified Order with Strict Horizontal Alignment -->
     <div class="print-signature-grid pt-8 pb-4">
       
       <!-- 1. NGƯỜI LẬP PHIẾU (Ảnh người thực hiện lệnh) -->
       <div class="flex flex-col items-center">
-        <div class="font-bold text-slate-800 uppercase mb-2">NGƯỜI LẬP PHIẾU</div>
-        <div class="h-14 flex items-center justify-center my-1 w-full">
-          ${creatorAvatar ? `<img src="${creatorAvatar}" alt="Ảnh người lập" class="print-signature-img border-2 border-sky-500 shadow-xs">` : `<div class="signature-box-blank w-full">(Đã ký xác nhận)</div>`}
+        <div class="h-7 flex items-center justify-center font-bold text-slate-800 text-xs uppercase mb-1">NGƯỜI LẬP PHIẾU</div>
+        <div class="h-16 w-full flex items-center justify-center my-1">
+          ${creatorAvatar ? `<img src="${creatorAvatar}" alt="Ảnh người lập" class="w-14 h-14 rounded-full object-cover border border-slate-300 shadow-2xs">` : `<div class="h-16 w-full"></div>`}
         </div>
-        <div class="font-bold text-slate-800 text-xs">${doc.creator}</div>
-        <div class="text-[10px] text-emerald-600 font-semibold">✓ Đã xác thực người lập</div>
+        <div class="h-6 flex items-center justify-center font-bold text-slate-800 text-xs">${doc.creator}</div>
+        <div class="h-5 flex items-center justify-center text-[10px] text-emerald-600 font-semibold">✓ Đã xác thực người lập</div>
       </div>
 
-      <!-- 2. THỦ KHO (Hiện tên & ảnh nếu đã xác nhận) -->
+      <!-- 2. THỦ KHO (Hiện tên & ảnh nếu đã xác nhận; nếu chưa thì để trống để ký thật) -->
       <div class="flex flex-col items-center">
-        <div class="font-bold text-slate-800 uppercase mb-2">THỦ KHO</div>
-        <div class="h-14 flex items-center justify-center my-1 w-full">
+        <div class="h-7 flex items-center justify-center font-bold text-slate-800 text-xs uppercase mb-1">THỦ KHO</div>
+        <div class="h-16 w-full flex items-center justify-center my-1">
           ${isKeeperApproved && keeperAvatar ? `
-            <img src="${keeperAvatar}" alt="Thủ kho" class="print-signature-img border-2 border-amber-500 shadow-xs">
+            <img src="${keeperAvatar}" alt="Thủ kho" class="w-14 h-14 rounded-full object-cover border border-amber-400 shadow-2xs">
           ` : `
-            <div class="signature-box-blank w-full">(Chờ thủ kho ký duyệt)</div>
+            <div class="h-16 w-full"></div>
           `}
         </div>
-        <div class="font-bold text-slate-800 text-xs">${isKeeperApproved ? keeperName : 'Thủ kho'}</div>
-        <div class="text-[10px] ${isKeeperApproved ? 'text-amber-700 font-bold' : 'text-slate-400 font-medium'}">
+        <div class="h-6 flex items-center justify-center font-bold text-slate-800 text-xs">${isKeeperApproved ? keeperName : '&nbsp;'}</div>
+        <div class="h-5 flex items-center justify-center text-[10px] ${isKeeperApproved ? 'text-amber-700 font-bold' : 'text-slate-400 italic'}">
           ${isKeeperApproved ? '✓ Thủ kho đã duyệt' : '(Ký, ghi rõ họ tên)'}
         </div>
       </div>
 
-      <!-- 3. QUẢN LÝ DỰ ÁN (Để trống để ký thật) -->
+      <!-- 3. QUẢN LÝ DỰ ÁN (Để trống hoàn toàn để ký thật) -->
       <div class="flex flex-col items-center">
-        <div class="font-bold text-slate-800 uppercase mb-2">QUẢN LÝ DỰ ÁN</div>
-        <div class="h-14 flex items-center justify-center my-1 w-full">
-          <div class="signature-box-blank w-full">(Để trống ký thật)</div>
+        <div class="h-7 flex items-center justify-center font-bold text-slate-800 text-xs uppercase mb-1">QUẢN LÝ DỰ ÁN</div>
+        <div class="h-16 w-full flex items-center justify-center my-1">
+          <div class="h-16 w-full"></div>
         </div>
-        <div class="text-[10px] text-slate-400 italic mt-1">(Ký, ghi rõ họ tên)</div>
+        <div class="h-6 flex items-center justify-center text-xs font-bold text-slate-800">&nbsp;</div>
+        <div class="h-5 flex items-center justify-center text-[10px] text-slate-400 italic">(Ký, ghi rõ họ tên)</div>
       </div>
 
-      <!-- 4. KẾ TOÁN (Để trống để ký thật) -->
+      <!-- 4. KẾ TOÁN (Để trống hoàn toàn để ký thật) -->
       <div class="flex flex-col items-center">
-        <div class="font-bold text-slate-800 uppercase mb-2">KẾ TOÁN</div>
-        <div class="h-14 flex items-center justify-center my-1 w-full">
-          <div class="signature-box-blank w-full">(Để trống ký thật)</div>
+        <div class="h-7 flex items-center justify-center font-bold text-slate-800 text-xs uppercase mb-1">KẾ TOÁN</div>
+        <div class="h-16 w-full flex items-center justify-center my-1">
+          <div class="h-16 w-full"></div>
         </div>
-        <div class="text-[10px] text-slate-400 italic mt-1">(Ký, ghi rõ họ tên)</div>
+        <div class="h-6 flex items-center justify-center text-xs font-bold text-slate-800">&nbsp;</div>
+        <div class="h-5 flex items-center justify-center text-[10px] text-slate-400 italic">(Ký, ghi rõ họ tên)</div>
       </div>
 
-      <!-- 5. GIÁM ĐỐC (Để trống để ký thật) -->
+      <!-- 5. GIÁM ĐỐC (Để trống hoàn toàn để ký thật) -->
       <div class="flex flex-col items-center">
-        <div class="font-bold text-slate-800 uppercase mb-2">GIÁM ĐỐC</div>
-        <div class="h-14 flex items-center justify-center my-1 w-full">
-          <div class="signature-box-blank w-full">(Để trống ký thật)</div>
+        <div class="h-7 flex items-center justify-center font-bold text-slate-800 text-xs uppercase mb-1">GIÁM ĐỐC</div>
+        <div class="h-16 w-full flex items-center justify-center my-1">
+          <div class="h-16 w-full"></div>
         </div>
-        <div class="text-[10px] text-slate-600 font-semibold mt-1">(Ký & đóng dấu)</div>
+        <div class="h-6 flex items-center justify-center text-xs font-bold text-slate-800">&nbsp;</div>
+        <div class="h-5 flex items-center justify-center text-[10px] text-slate-600 font-semibold">(Ký & đóng dấu)</div>
       </div>
 
     </div>
@@ -5477,18 +6321,58 @@ function renderNotifications() {
 
   list.innerHTML = notifs.map(n => {
     let actionButtons = "";
+    let itemizedDocPreview = "";
 
     if (n.type === "APPROVAL_REQUIRED") {
+      const doc = (state.documents || []).find(d => d.code === n.docCode || d.id === n.docId);
+      if (doc && doc.items && doc.items.length > 0) {
+        itemizedDocPreview = `
+          <div class="mt-2 bg-slate-50 rounded-lg border border-slate-200 overflow-hidden text-[11px]">
+            <div class="px-2 py-1 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between font-bold text-slate-700">
+              <span>Bảng Đạo Cụ Cần Duyệt (${doc.items.length} món):</span>
+              <button onclick="openDocumentPrintModal('${doc.id}')" class="text-sky-600 hover:text-sky-800 font-semibold flex items-center gap-1">
+                <i data-lucide="file-text" class="w-3 h-3"></i>
+                <span>Xem Phiếu</span>
+              </button>
+            </div>
+            <div class="max-h-36 overflow-y-auto">
+              <table class="w-full text-left">
+                <thead class="bg-slate-200/50 text-[10px] text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th class="py-1 px-1.5 w-6 text-center">STT</th>
+                    <th class="py-1 px-1.5">Tên Đạo Cụ</th>
+                    <th class="py-1 px-1 text-center w-10">SL</th>
+                    <th class="py-1 px-1 text-center w-10">ĐVT</th>
+                    <th class="py-1 px-1.5">Kệ / Vị Trí</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200/60 bg-white">
+                  ${doc.items.map((it, idx) => `
+                    <tr>
+                      <td class="py-1 px-1.5 text-center text-slate-400 font-medium text-[10px]">${idx + 1}</td>
+                      <td class="py-1 px-1.5 font-semibold text-slate-800">${it.name}</td>
+                      <td class="py-1 px-1 text-center font-bold text-sky-700">${it.qty}</td>
+                      <td class="py-1 px-1 text-center text-slate-500">${it.unit}</td>
+                      <td class="py-1 px-1.5 text-slate-600 text-[10px] truncate max-w-[100px]">${it.shelf || 'Khu vực chuẩn bị'}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
       if (n.status === "PENDING") {
         if (isKeeperOrAdmin) {
           actionButtons = `
-            <div class="flex items-center gap-1.5 pt-1.5">
-              <button onclick="approveKeeperDoc('${n.id}')" class="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition shadow-2xs flex items-center gap-1">
-                <i data-lucide="check" class="w-3 h-3"></i>
-                <span>Xác nhận duyệt</span>
+            <div class="flex items-center gap-1.5 pt-2">
+              <button onclick="approveKeeperDoc('${n.id}')" class="px-3 py-1.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition shadow-2xs flex items-center gap-1">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                <span>Xác nhận duyệt & ký tên</span>
               </button>
-              <button onclick="rejectKeeperDoc('${n.id}')" class="px-2.5 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-md transition shadow-2xs flex items-center gap-1">
-                <i data-lucide="x" class="w-3 h-3"></i>
+              <button onclick="rejectKeeperDoc('${n.id}')" class="px-2.5 py-1.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition shadow-2xs flex items-center gap-1">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
                 <span>Từ chối</span>
               </button>
             </div>
@@ -5515,12 +6399,13 @@ function renderNotifications() {
     }
 
     return `
-      <div class="p-2.5 hover:bg-slate-50 transition border-b border-slate-100 last:border-b-0 space-y-1">
+      <div class="p-3 hover:bg-slate-50 transition border-b border-slate-100 last:border-b-0 space-y-1">
         <div class="flex items-start justify-between gap-1">
           <div class="font-bold text-slate-800 text-xs">${n.title}</div>
           <span class="text-[9px] text-slate-400 shrink-0">${n.createdAt}</span>
         </div>
         <div class="text-[11px] text-slate-600">${n.message}</div>
+        ${itemizedDocPreview}
         ${actionButtons}
       </div>
     `;

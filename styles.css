@@ -307,16 +307,10 @@ body {
 }
 
 .signature-box-blank {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed #cbd5e1;
-  border-radius: 6px;
-  background-color: #f8fafc;
-  font-size: 10px;
-  color: #94a3b8;
-  font-style: italic;
+  height: 64px;
+  min-height: 64px;
+  display: block;
+  width: 100%;
   margin: 4px 0;
 }
 
