@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ABA Inventory & Event Operations System | Quản Lý Đạo Cụ & Kho Bãi</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- SheetJS (xlsx) for Excel Import & Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Canvas Confetti for celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col selection:bg-sky-500 selection:text-white">
+
+  <!-- ==================== HEADER & TOPBAR ==================== -->
+  <header class="glass-header sticky top-0 z-40 px-3 py-2 sm:px-6 sm:py-2.5 transition-all shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+      
+      <!-- Brand & Title: On mobile, hide title text to keep it ultra compact -->
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <img src="logo.png" alt="ABA Logo" class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl object-contain bg-white shadow-xs p-0.5 border border-slate-200">
+        <div class="hidden sm:block">
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-base font-bold text-slate-900 leading-tight">Quản Lý Đạo Cụ & Kho Bãi</h1>
+            <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-800">
+              Operations 2.0
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500">ABA Inventory & Event Operations System</p>
+        </div>
+      </div>
+
+      <!-- Quick Action Shortcuts & Status -->
+      <div class="flex items-center gap-1.5 sm:gap-2.5">
+        
+        <!-- Google Sheet Status Badge: On mobile only show pulsating dot, no text -->
+        <button id="btn-gsheet-status" onclick="openGSheetModal()" class="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition shadow-xs" title="Bấm để cấu hình đồng bộ Google Sheet">
+          <span id="gsheet-pulse" class="w-2.5 h-2.5 rounded-full bg-emerald-500 live-pulse"></span>
+          <span id="gsheet-text" class="hidden sm:inline">Google Sheet: Đã kết nối</span>
+        </button>
+
+        <!-- Quick Shortcut: Kho Bãi (Authentic Warehouse Icon) -->
+        <button onclick="openWarehouseModal()" class="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition" title="Quản lý danh sách kho bãi">
+          <svg class="w-4 h-4 text-sky-600 shrink-0 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+            <path d="M7 21v-7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7"/>
+            <path d="M10 13h4"/>
+            <path d="M10 17h4"/>
+          </svg>
+          <span class="hidden md:inline ml-1">Kho Bãi</span>
+        </button>
+
+        <!-- Quick Shortcut: Mẫu Game -->
+        <button onclick="openGameCombosModal()" class="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition" title="Quản lý bộ game & combo">
+          <i data-lucide="boxes" class="w-4 h-4 text-amber-600"></i>
+          <span class="hidden md:inline ml-1">Mẫu Game</span>
+        </button>
+
+        <!-- Notification Bell & Warehouse Keeper Approval Panel -->
+        <div class="relative">
+          <button id="btn-notification-bell" onclick="toggleNotificationPanel()" class="relative p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition shadow-xs" title="Thông báo hệ thống & Duyệt phiếu kho">
+            <i data-lucide="bell" class="w-4 h-4 text-amber-500"></i>
+            <span id="notification-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-bounce">0</span>
+          </button>
+
+          <!-- Notification Dropdown Flyout -->
+          <div id="notification-panel" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden text-xs">
+            <div class="p-3 bg-slate-900 text-white flex items-center justify-between">
+              <div class="flex items-center gap-2 font-bold">
+                <i data-lucide="bell" class="w-4 h-4 text-amber-400"></i>
+                <span>Thông Báo & Duyệt Thao Tác</span>
+              </div>
+              <button type="button" onclick="markAllNotificationsAsRead()" class="text-[10px] text-slate-300 hover:text-white underline">Đã đọc tất cả</button>
+            </div>
+            
+            <div id="notification-list" class="max-h-80 overflow-y-auto divide-y divide-slate-100 p-1">
+              <!-- Rendered items -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Shortcut: Làm mới dữ liệu -->
+        <button onclick="refreshData()" class="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition" title="Làm mới dữ liệu">
+          <i data-lucide="refresh-cw" class="w-4 h-4 text-emerald-600"></i>
+          <span class="hidden md:inline ml-1">Làm mới</span>
+        </button>
+
+        <!-- User Identity / Lock & Switch -->
+        <div class="flex items-center gap-2 pl-1 sm:pl-2 border-l border-slate-200">
+          <button onclick="openUserModal()" class="flex items-center gap-1.5 text-left hover:opacity-85 transition group" title="Bấm để đổi tài khoản hoặc phân quyền">
+            <img id="user-avatar" src="" alt="Avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-sky-500/30">
+            <div class="hidden lg:block leading-tight">
+              <div id="user-name" class="text-xs font-bold text-slate-800">Đang tải...</div>
+              <div class="flex items-center gap-1">
+                <span id="user-role-badge" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800">Thủ kho</span>
+              </div>
+            </div>
+          </button>
+          
+          <button onclick="openLockAdminModal()" class="p-1.5 text-slate-400 hover:text-rose-600 transition" title="Khóa / Đổi tài khoản (Mật khẩu Admin)">
+            <i data-lucide="lock" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ==================== 8-TAB NAVIGATION BAR ==================== -->
+    <div class="max-w-7xl mx-auto mt-2 pt-2 border-t border-slate-200/70">
+      
+      <!-- Mobile 8-Tab Navigation (Exact 1 row, grid-cols-8, zero horizontal scroll) -->
+      <nav class="grid grid-cols-8 gap-0.5 sm:hidden text-center select-none" id="mobile-nav">
+        <button onclick="switchTab(1)" class="tab-btn active flex flex-col items-center justify-center py-1 rounded" data-tab="1">
+          <svg class="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+            <path d="M7 21v-7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7"/>
+          </svg>
+          <span class="text-[10px] mt-0.5 leading-none">Kho</span>
+        </button>
+        <button onclick="switchTab(2)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="2">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">N.Mới</span>
+        </button>
+        <button onclick="switchTab(3)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="3">
+          <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">Xuất</span>
+        </button>
+        <button onclick="switchTab(4)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="4">
+          <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">Thu Hồi</span>
+        </button>
+        <button onclick="switchTab(5)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="5">
+          <i data-lucide="tent" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">C.Trình</span>
+        </button>
+        <button onclick="switchTab(6)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="6">
+          <i data-lucide="wrench" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">Sửa</span>
+        </button>
+        <button onclick="switchTab(7)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="7">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">T.Lý</span>
+        </button>
+        <button onclick="switchTab(8)" class="tab-btn flex flex-col items-center justify-center py-1 rounded" data-tab="8">
+          <i data-lucide="file-text" class="w-4 h-4"></i>
+          <span class="text-[10px] mt-0.5 leading-none">C.Từ</span>
+        </button>
+      </nav>
+
+      <!-- Desktop 8-Tab Navigation (Full icons & text) -->
+      <nav class="hidden sm:flex items-center gap-1 overflow-x-auto no-scrollbar select-none" id="desktop-nav">
+        <button onclick="switchTab(1)" class="tab-btn active flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="1">
+          <svg class="w-4 h-4 text-sky-600 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+            <path d="M7 21v-7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7"/>
+          </svg>
+          <span>1. Kho (Tổng Kho)</span>
+        </button>
+        <button onclick="switchTab(2)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="2">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>2. Nhập Mới</span>
+        </button>
+        <button onclick="switchTab(3)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="3">
+          <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+          <span>3. Xuất Kho</span>
+        </button>
+        <button onclick="switchTab(4)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="4">
+          <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
+          <span>4. Thu Hồi (Nhập Lại)</span>
+        </button>
+        <button onclick="switchTab(5)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="5">
+          <i data-lucide="tent" class="w-4 h-4"></i>
+          <span>5. Chương Trình</span>
+        </button>
+        <button onclick="switchTab(6)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="6">
+          <i data-lucide="wrench" class="w-4 h-4"></i>
+          <span>6. Sửa Chữa</span>
+        </button>
+        <button onclick="switchTab(7)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="7">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>7. Thanh Lý</span>
+        </button>
+        <button onclick="switchTab(8)" class="tab-btn flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg text-slate-600 hover:text-sky-600 hover:bg-sky-50/50 transition" data-tab="8">
+          <i data-lucide="file-text" class="w-4 h-4"></i>
+          <span>8. Chứng Từ</span>
+        </button>
+      </nav>
+
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT CONTAINER ==================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-6">
+
+    <!-- ========================================================================= -->
+    <!-- TAB 1: KHO (DANH MỤC TỔNG KHO)                                            -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-1" class="tab-panel space-y-4">
+      
+      <!-- Top Metrics: 5 Chỉ Số Tồn Kho Chuẩn Xác -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-4">
+        
+        <!-- Sẵn sàng -->
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-100 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Sẵn Sàng (Dùng)</div>
+            <div id="stat-ready" class="text-lg sm:text-2xl font-bold text-emerald-600">0</div>
+          </div>
+        </div>
+
+        <!-- Đang đi -->
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-amber-100 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <i data-lucide="truck" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Đang Đi (C.Trình)</div>
+            <div id="stat-inuse" class="text-lg sm:text-2xl font-bold text-amber-600">0</div>
+          </div>
+        </div>
+
+        <!-- Hỏng -->
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-rose-100 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Đang Hỏng</div>
+            <div id="stat-broken" class="text-lg sm:text-2xl font-bold text-rose-600">0</div>
+          </div>
+        </div>
+
+        <!-- Tại kho -->
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-sky-100 shadow-xs flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
+            <i data-lucide="archive" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Tại Kho Bãi</div>
+            <div id="stat-instock" class="text-lg sm:text-2xl font-bold text-sky-600">0</div>
+          </div>
+        </div>
+
+        <!-- Tổng tài sản -->
+        <div class="bg-white p-3 sm:p-4 rounded-xl border border-purple-100 shadow-xs flex items-center gap-3 col-span-2 sm:col-span-1">
+          <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Tổng Tài Sản</div>
+            <div id="stat-total" class="text-lg sm:text-2xl font-bold text-purple-600">0</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Toolbar & Multi-dimensional Filter Bar -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
+        
+        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          
+          <!-- Search Box -->
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input type="text" id="tab1-search" oninput="renderTab1Items()" placeholder="Tìm theo mã đạo cụ (A-001...), tên đạo cụ hoặc thông số kỹ thuật..." class="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition">
+          </div>
+
+          <!-- Excel Actions -->
+          <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <button onclick="exportInventoryExcel()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-xs whitespace-nowrap">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+              <span>Xuất Excel</span>
+            </button>
+            <label class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer shadow-xs whitespace-nowrap">
+              <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
+              <span>Nhập Excel</span>
+              <input type="file" id="tab1-import-excel" accept=".xlsx, .xls" class="hidden" onchange="importInventoryExcel(event)">
+            </label>
+            <button onclick="downloadSampleExcel()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 transition whitespace-nowrap" title="Tải file mẫu Excel">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <span>File mẫu</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Filter Dropdowns Row -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100">
+          
+          <!-- Filter: Kho -->
+          <div>
+            <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Kho lưu trữ</label>
+            <select id="tab1-filter-warehouse" onchange="renderTab1Items()" class="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-md focus:ring-1 focus:ring-sky-500 focus:outline-none">
+              <option value="ALL">Tất cả kho</option>
+            </select>
+          </div>
+
+          <!-- Filter: Phân loại -->
+          <div>
+            <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Phân loại</label>
+            <select id="tab1-filter-type" onchange="renderTab1Items()" class="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-md focus:ring-1 focus:ring-sky-500 focus:outline-none">
+              <option value="ALL">Tất cả phân loại</option>
+              <option value="Khấu hao">Khấu hao (Tái sử dụng)</option>
+              <option value="Tiêu hao">Tiêu hao (Hao hụt)</option>
+            </select>
+          </div>
+
+          <!-- Filter: Danh mục -->
+          <div>
+            <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Danh mục đạo cụ</label>
+            <select id="tab1-filter-category" onchange="renderTab1Items()" class="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-md focus:ring-1 focus:ring-sky-500 focus:outline-none">
+              <option value="ALL">Tất cả danh mục</option>
+            </select>
+          </div>
+
+          <!-- Filter: Trạng thái đặc biệt -->
+          <div>
+            <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Trạng thái đặc biệt</label>
+            <select id="tab1-filter-special" onchange="renderTab1Items()" class="w-full text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-md focus:ring-1 focus:ring-sky-500 focus:outline-none">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="NO_SHELF">Chưa xếp giá kệ</option>
+              <option value="LOW_STOCK">Dưới định mức tồn</option>
+              <option value="HAS_BROKEN">Đang có đồ hỏng</option>
+            </select>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Desktop View: Table Format -->
+      <div class="hidden md:block bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                <th class="py-3 px-3">Mã & Ảnh</th>
+                <th class="py-3 px-3">Tên Đạo Cụ & Thông Số</th>
+                <th class="py-3 px-3">Danh Mục / Phân Loại</th>
+                <th class="py-3 px-3">Kho & Vị Trí Kệ</th>
+                <th class="py-3 px-2 text-center text-emerald-600 bg-emerald-50/40">Sẵn Sàng</th>
+                <th class="py-3 px-2 text-center text-amber-600 bg-amber-50/40">Đang Đi</th>
+                <th class="py-3 px-2 text-center text-rose-600 bg-rose-50/40">Hỏng</th>
+                <th class="py-3 px-2 text-center text-sky-600 bg-sky-50/40">Tại Kho</th>
+                <th class="py-3 px-2 text-center text-purple-600 bg-purple-50/40">Tổng</th>
+                <th class="py-3 px-3 text-right">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="tab1-table-body" class="divide-y divide-slate-100">
+              <!-- Rendered via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Mobile View: Modern Cards (Row 1: photo/name/code/edit; Row 2: shelf; Row 3: 5 mini color badges) -->
+      <div id="tab1-mobile-cards" class="md:hidden space-y-2.5">
+        <!-- Rendered via JavaScript -->
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 2: NHẬP MỚI (PHIẾU KHAI BÁO NHẬP KHO LẦN ĐẦU) - EXACT MATCH IMAGE 1   -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-2" class="tab-panel hidden space-y-4">
+      
+      <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
+        
+        <!-- Header: Title & Reset Button -->
+        <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div>
+            <h2 class="text-lg sm:text-xl font-bold text-sky-900 tracking-tight">PHIẾU NHẬP KHO LẦN ĐẦU</h2>
+            <p class="text-xs text-slate-500">Tự động sinh chứng từ lưu Thư Viện</p>
+          </div>
+          <button type="button" onclick="resetTab2Form()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            <span>Nhập lại</span>
+          </button>
+        </div>
+
+        <!-- Form Elements -->
+        <form id="form-tab2-new-item" onsubmit="handleTab2Submit(event)" class="space-y-4 text-xs">
+          
+          <!-- 1. LOẠI KHAI BÁO & 2. THUỘC TÍNH KHẤU HAO (Big Selection Cards - Image 1) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <!-- 1. LOẠI KHAI BÁO -->
+            <div class="space-y-1.5">
+              <label class="block text-xs font-bold text-slate-800 uppercase tracking-wide">1. LOẠI KHAI BÁO:</label>
+              <div class="grid grid-cols-2 gap-2.5">
+                
+                <!-- Card: ĐỒ MỚI -->
+                <div id="tab2-card-mode-new" onclick="setTab2Mode('NEW')" class="selectable-card selected-blue p-3 rounded-xl flex items-center gap-2.5">
+                  <div class="text-xl">✨</div>
+                  <div>
+                    <div class="font-bold text-slate-900">ĐỒ MỚI</div>
+                    <div class="text-[10px] text-slate-500 leading-tight">Mua sắm mới hoàn toàn</div>
+                  </div>
+                </div>
+
+                <!-- Card: ĐỒ ĐÃ CÓ -->
+                <div id="tab2-card-mode-existing" onclick="setTab2Mode('EXISTING')" class="selectable-card p-3 rounded-xl flex items-center gap-2.5">
+                  <div class="text-xl">📦</div>
+                  <div>
+                    <div class="font-bold text-slate-900">ĐỒ ĐÃ CÓ</div>
+                    <div class="text-[10px] text-slate-500 leading-tight">Mua bổ sung</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- 2. THUỘC TÍNH KHẤU HAO -->
+            <div class="space-y-1.5">
+              <label class="block text-xs font-bold text-slate-800 uppercase tracking-wide">2. THUỘC TÍNH KHẤU HAO:</label>
+              <div class="grid grid-cols-2 gap-2.5">
+                
+                <!-- Card: KHẤU HAO -->
+                <div id="tab2-card-type-khauhao" onclick="setTab2Type('Khấu hao')" class="selectable-card selected-green p-3 rounded-xl flex items-center gap-2.5">
+                  <div class="text-emerald-600 font-bold text-xl"><i data-lucide="shield-check" class="w-6 h-6"></i></div>
+                  <div>
+                    <div class="font-bold text-emerald-800">KHẤU HAO</div>
+                    <div class="text-[10px] text-slate-500 leading-tight">Sử dụng nhiều lần</div>
+                  </div>
+                </div>
+
+                <!-- Card: TIÊU HAO -->
+                <div id="tab2-card-type-tieuhao" onclick="setTab2Type('Tiêu hao')" class="selectable-card p-3 rounded-xl flex items-center gap-2.5">
+                  <div class="text-slate-400 font-bold text-xl"><i data-lucide="package" class="w-6 h-6"></i></div>
+                  <div>
+                    <div class="font-bold text-slate-800">TIÊU HAO</div>
+                    <div class="text-[10px] text-slate-500 leading-tight">Đồ dùng 1 lần</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Form Fields Row 1 -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            
+            <!-- Mã đạo cụ (Tự tạo) -->
+            <div class="sm:col-span-3">
+              <label class="block font-semibold text-slate-700 mb-1">Mã đạo cụ</label>
+              <input type="text" id="tab2-code" readonly placeholder="Tự tạo A0001..." class="w-full p-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-semibold cursor-not-allowed">
+            </div>
+
+            <!-- Tên đạo cụ (With Live Autocomplete Dropdown) -->
+            <div class="sm:col-span-5 relative">
+              <label class="block font-semibold text-slate-700 mb-1">Tên đạo cụ <span class="text-rose-500">*</span></label>
+              <input type="text" id="tab2-name" required autocomplete="off" oninput="handleTab2NameInput(this.value)" placeholder="Gõ tên để tìm hoặc nhập mới..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none">
+              <!-- Live Floating Suggestions -->
+              <div id="tab2-name-suggestions" class="autocomplete-suggestions hidden"></div>
+            </div>
+
+            <!-- Đơn vị -->
+            <div class="sm:col-span-2">
+              <label class="block font-semibold text-slate-700 mb-1">Đơn vị <span class="text-rose-500">*</span></label>
+              <input type="text" id="tab2-unit" required placeholder="cái, bộ..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+            </div>
+
+            <!-- Số lượng -->
+            <div class="sm:col-span-2">
+              <label class="block font-semibold text-slate-700 mb-1">Số lượng <span class="text-rose-500">*</span></label>
+              <input type="number" id="tab2-qty" min="1" value="1" required oninput="updateTab2ShelfValidation()" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-center font-bold text-sky-900 focus:ring-1 focus:ring-sky-500 focus:outline-none">
+            </div>
+
+          </div>
+
+          <!-- Form Fields Row 2 -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div class="sm:col-span-8">
+              <label class="block font-semibold text-slate-700 mb-1">Thông số kỹ thuật / Ghi chú</label>
+              <input type="text" id="tab2-specs" placeholder="Quy cách, kích thước, màu sắc..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+            </div>
+            <div class="sm:col-span-4">
+              <label class="block font-semibold text-slate-700 mb-1">Định mức tồn tối thiểu (Tiêu hao)</label>
+              <input type="number" id="tab2-minstock" min="0" value="0" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- BOX: Vị Trí Lưu Kho (1 kho cho mỗi lần lưu) - Yellow container Image 1 -->
+          <div class="border-2 border-amber-300 bg-amber-50/20 rounded-2xl p-4 space-y-3">
+            
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div class="flex items-center gap-2 font-bold text-slate-800 text-xs sm:text-sm">
+                <span>🏛️ Vị Trí Lưu Kho (1 kho cho mỗi lần lưu)</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <!-- Status Badge -->
+                <span id="tab2-shelf-status-badge" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                  <i data-lucide="check-square" class="w-3.5 h-3.5"></i>
+                  <span>Khớp số lượng: 1 / 1</span>
+                </span>
+
+                <!-- Button: + Thêm vị trí giá kệ -->
+                <button type="button" onclick="addTab2ShelfItemRow()" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  <span>+ Thêm vị trí giá kệ</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Kho lưu trữ Dropdown -->
+            <div class="max-w-md">
+              <label class="block font-semibold text-slate-700 mb-1">Kho lưu trữ <span class="text-rose-500">*</span></label>
+              <select id="tab2-warehouse" required class="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                <!-- dynamic warehouse options -->
+              </select>
+            </div>
+
+            <!-- Shelf Rows Container -->
+            <div id="tab2-shelf-rows-container" class="space-y-2 pt-1">
+              <!-- shelf rows inserted dynamically -->
+            </div>
+
+          </div>
+
+          <!-- Danh mục (Chọn nhiều) - Pill Buttons (Image 1) -->
+          <div class="space-y-1.5 pt-1">
+            <label class="block font-bold text-slate-800">Danh mục (Chọn nhiều)</label>
+            <div id="tab2-category-pills" class="flex flex-wrap gap-2">
+              <!-- rendered via JavaScript -->
+            </div>
+          </div>
+
+          <!-- Sử dụng cho (Chọn nhiều) - Pill Buttons (Image 1) -->
+          <div class="space-y-1.5 pt-1">
+            <label class="block font-bold text-slate-800">Sử dụng cho (Chọn nhiều)</label>
+            <div id="tab2-purpose-pills" class="flex flex-wrap gap-2">
+              <!-- rendered via JavaScript -->
+            </div>
+          </div>
+
+          <!-- Purchase Details Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Thời gian mua</label>
+              <input type="date" id="tab2-purchase-date" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Đơn vị cung cấp</label>
+              <input type="text" id="tab2-supplier" placeholder="Tên đối tác..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Đơn giá mua (VNĐ)</label>
+              <input type="text" id="tab2-invoice-cost" oninput="formatCurrencyInput(this)" placeholder="0" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none text-right font-medium">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Hóa đơn mua hàng (Gửi file / Chụp)</label>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="triggerCameraCapture('tab2-invoice-preview')" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md font-semibold text-slate-700 flex items-center justify-center gap-1">
+                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                  <span>Chụp</span>
+                </button>
+                <label class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md font-semibold text-slate-700 flex items-center justify-center gap-1 cursor-pointer">
+                  <i data-lucide="file-up" class="w-3.5 h-3.5"></i>
+                  <span>Gửi file</span>
+                  <input type="file" accept="image/*,.pdf" class="hidden" onchange="handleSingleFileUpload(event, 'tab2-invoice-preview')">
+                </label>
+              </div>
+              <div id="tab2-invoice-preview" class="mt-1 text-[11px] text-slate-500 italic">Chưa có file</div>
+            </div>
+          </div>
+
+          <!-- BOX: Album Ảnh Đạo Cụ (Image 1) -->
+          <div class="border border-sky-200 bg-sky-50/20 rounded-2xl p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-sky-950 flex items-center gap-1.5">
+                <i data-lucide="image" class="w-4 h-4 text-sky-600"></i>
+                <span>Album Ảnh Đạo Cụ (Bắt buộc có ảnh nếu là Đồ mới)</span>
+              </span>
+              <div class="flex items-center gap-2">
+                <label class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs cursor-pointer flex items-center gap-1">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                  <span>Gửi file ảnh</span>
+                  <input type="file" accept="image/*" multiple class="hidden" onchange="handleMultiplePhotosUpload(event)">
+                </label>
+                <button type="button" onclick="triggerCameraCapture('album-photo-capture')" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs">
+                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                  <span>Chụp ảnh</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Photos Container -->
+            <div id="tab2-album-container" class="min-h-16 p-3 bg-white border border-slate-200 rounded-xl flex flex-wrap gap-2.5 items-center">
+              <span class="text-slate-400 italic">Chưa có ảnh nào trong album</span>
+            </div>
+          </div>
+
+          <!-- Submit Button (Large Blue Button - Image 1) -->
+          <div class="pt-3 flex justify-end">
+            <button type="submit" class="px-8 py-3 rounded-xl bg-sky-800 hover:bg-sky-900 text-white font-extrabold text-sm shadow-md flex items-center gap-2 transition">
+              <i data-lucide="save" class="w-4 h-4"></i>
+              <span>GHI NHỚ THÔNG TIN</span>
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 3: XUẤT KHO (LẬP PHIẾU XUẤT & NGHIỆM THU) - MATCH IMAGE 2 & 3        -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-3" class="tab-panel hidden space-y-4">
+      
+      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        
+        <!-- Project Info Bar (Image 3 Style) -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+          
+          <!-- Dự án * (With live autocomplete suggestion) -->
+          <div class="relative">
+            <label class="block font-semibold text-slate-700 mb-1">Dự án <span class="text-rose-500">*</span></label>
+            <input type="text" id="tab3-project-name" autocomplete="off" oninput="handleTab3ProjectInput(this.value)" onclick="handleTab3ProjectInput(this.value)" onfocus="handleTab3ProjectInput(this.value)" placeholder="Gõ tìm dự án..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none font-medium">
+            <div id="tab3-project-suggestions" class="autocomplete-suggestions hidden"></div>
+          </div>
+
+          <!-- Địa điểm thực hiện -->
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Địa điểm thực hiện</label>
+            <input type="text" id="tab3-project-location" placeholder="Địa điểm..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+          </div>
+
+          <!-- Thời gian thực hiện -->
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Thời gian thực hiện</label>
+            <input type="date" id="tab3-project-date" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+          </div>
+
+          <!-- Kho xuất hàng * -->
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Kho xuất hàng <span class="text-rose-500">*</span></label>
+            <select id="tab3-warehouse" onchange="handleTab3WarehouseChanged()" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none font-semibold text-sky-900">
+              <!-- dynamic warehouse options -->
+            </select>
+          </div>
+
+        </div>
+
+        <!-- Add Combo Helper & Action Toolbar (Image 2 & 3) -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-amber-50/40 rounded-xl border border-amber-200/70 text-xs">
+          
+          <!-- Left: Add Game Combo with quantity -->
+          <div class="flex items-center gap-2 flex-1 max-w-xl">
+            <select id="tab3-combo-select" class="flex-1 p-2 bg-white border border-slate-300 rounded-lg focus:outline-none">
+              <option value="">-- Chọn Bộ Game --</option>
+              <!-- dynamic combo options -->
+            </select>
+            <input type="number" id="tab3-combo-qty" min="1" value="1" class="w-16 p-2 bg-white border border-slate-300 rounded-lg text-center font-bold" title="Số lượng bộ game">
+            <button type="button" onclick="addTab3GameCombo()" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
+              <span>🎲 + Game</span>
+            </button>
+          </div>
+
+          <!-- Right: Excel Import, Template Download, Reset Form -->
+          <div class="flex items-center gap-2 justify-end">
+            <label class="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold flex items-center gap-1 cursor-pointer shadow-xs whitespace-nowrap">
+              <i data-lucide="upload" class="w-4 h-4"></i>
+              <span>Nhập Excel</span>
+              <input type="file" id="tab3-import-excel" accept=".xlsx, .xls" class="hidden" onchange="importTab3Excel(event)">
+            </label>
+
+            <!-- Tải Mẫu Excel button -->
+            <button type="button" onclick="downloadTab3SampleExcel()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold flex items-center gap-1 shadow-xs whitespace-nowrap" title="Tải file mẫu Excel xuất kho">
+              <i data-lucide="download" class="w-4 h-4 text-sky-600"></i>
+              <span>Tải Mẫu</span>
+            </button>
+
+            <!-- Nhập Lại button -->
+            <button type="button" onclick="resetTab3Form()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-1 shadow-xs whitespace-nowrap" title="Xóa trắng danh sách xuất">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              <span>Nhập lại</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Checklist Table with Direct Inline Rows (Image 3) -->
+        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase text-[11px]">
+                <th class="py-2.5 px-3 w-12 text-center">STT</th>
+                <th class="py-2.5 px-3 min-w-[240px]">HẠNG MỤC (TÊN ĐẠO CỤ)</th>
+                <th class="py-2.5 px-2 w-16 text-center">ĐVT</th>
+                <th class="py-2.5 px-2 w-24 text-center">SỐ LƯỢNG</th>
+                <th class="py-2.5 px-3 min-w-[140px] text-center">TÌNH TRẠNG</th>
+                <th class="py-2.5 px-3 min-w-[160px]">VỊ TRÍ LƯU KHO</th>
+                <th class="py-2.5 px-2 w-12 text-center">XÓA</th>
+              </tr>
+            </thead>
+            <tbody id="tab3-table-body" class="divide-y divide-slate-100">
+              <!-- Rendered dynamically with Combos and Direct Inline Rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Action Confirmation Footer (Image 3) -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200">
+          
+          <!-- Left: Team photo button & status -->
+          <div class="flex items-center gap-3 w-full sm:w-auto">
+            <button type="button" onclick="triggerCameraCapture('tab3-team-photo-preview')" class="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-xs">
+              <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+              <span>Chụp ảnh cả đội xuất đồ</span>
+            </button>
+            <div id="tab3-team-photo-preview" class="hidden w-10 h-10 rounded-lg overflow-hidden border border-slate-200">
+              <img src="" alt="Team" class="w-full h-full object-cover">
+            </div>
+            <span id="tab3-team-photo-status" class="text-xs text-slate-500 italic">Chưa có ảnh đội</span>
+          </div>
+
+          <!-- Right: Buttons -->
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+            
+            <!-- CHUYỂN THÀNH PHIẾU CHUẨN BỊ ĐỒ (Purple button) -->
+            <button type="button" onclick="saveTab3PreparationSlip()" class="px-4 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition">
+              <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+              <span>CHUYỂN THÀNH PHIẾU CHUẨN BỊ ĐỒ</span>
+            </button>
+
+            <!-- TÔI XÁC NHẬN LẤY DANH SÁCH ĐỒ TRÊN (Orange button) -->
+            <button type="button" onclick="openTab3InspectionModal()" class="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition">
+              <i data-lucide="truck" class="w-4 h-4"></i>
+              <span>TÔI XÁC NHẬN LẤY DANH SÁCH ĐỒ TRÊN</span>
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 4: THU HỒI / NHẬP KHO (SAU SỰ KIỆN)                                  -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-4" class="tab-panel hidden space-y-4">
+      
+      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        
+        <!-- Header & Program Selector (Filters programs holding props) -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Thu Hồi & Kiểm Kê Đạo Cụ Sau Chương Trình</h2>
+            <p class="text-xs text-slate-500">Tiếp nhận hoàn trả, kiểm đếm đồ lành và tách riêng báo cáo sự cố/hỏng</p>
+          </div>
+
+          <!-- Program Selector Dropdown -->
+          <div class="w-full sm:w-80">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Chọn chương trình đang giữ đồ:</label>
+            <select id="tab4-tour-select" onchange="loadTab4TourData(this.value)" class="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-sky-800 focus:outline-none focus:ring-1 focus:ring-sky-500">
+              <option value="">-- Chọn Chương trình cần thu hồi --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Selected Program Banner -->
+        <div id="tab4-tour-banner" class="hidden p-3 bg-sky-50/70 border border-sky-100 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="font-bold text-sky-900" id="tab4-banner-tourname">Chương trình</span>
+            <span class="text-slate-500 ml-2" id="tab4-banner-location">Địa điểm</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-slate-600">Phụ trách: <strong id="tab4-banner-leader">...</strong></span>
+            <span class="px-2 py-0.5 rounded bg-sky-200 text-sky-800 font-bold" id="tab4-banner-total">0 món</span>
+          </div>
+        </div>
+
+        <!-- BẢNG 1: CHECKLIST HOÀN TRẢ ĐỒ LÀNH -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">1</span>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-800">Bảng 1: Kiểm Kê Đạo Cụ Còn Tốt Hoàn Trả</h3>
+            </div>
+            <button type="button" onclick="setAllTab4ToPostCheckShelf()" class="text-xs font-semibold px-2.5 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition" title="Lưu toàn bộ đồ vào vị trí chờ kiểm tra">
+              Lưu tại vị trí Hậu kiểm
+            </button>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 font-semibold text-slate-600 uppercase text-[10px]">
+                  <th class="py-2.5 px-3">Tên Đạo Cụ</th>
+                  <th class="py-2.5 px-2 text-center w-16">ĐVT</th>
+                  <th class="py-2.5 px-2 text-center w-24">Đã Mang Đi</th>
+                  <th class="py-2.5 px-2 text-center w-28 bg-emerald-50/50 text-emerald-700">SL Còn Tốt</th>
+                  <th class="py-2.5 px-2 text-center w-24">Chênh Lệch</th>
+                  <th class="py-2.5 px-3 w-40">Giá / Kệ Cất</th>
+                  <th class="py-2.5 px-2 text-center w-28">Số Tầng</th>
+                </tr>
+              </thead>
+              <tbody id="tab4-return-table-body" class="divide-y divide-slate-100">
+                <tr><td colspan="7" class="p-4 text-center text-slate-400">Vui lòng chọn Chương trình phía trên để tải danh sách đạo cụ</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- BẢNG 2: BÁO SỰ CỐ / ĐỒ HỎNG RIÊNG BIỆT -->
+        <div class="space-y-2 pt-2 border-t border-slate-200">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-xs">2</span>
+              <h3 class="text-xs sm:text-sm font-bold text-rose-800">Bảng 2: Khai Báo Sự Cố & Đạo Cụ Hỏng (Bắt buộc kèm ảnh)</h3>
+            </div>
+            <button type="button" onclick="addTab4BrokenRow()" class="text-xs font-semibold px-2.5 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition">
+              + Thêm Đồ Hỏng
+            </button>
+          </div>
+
+          <div class="overflow-x-auto border border-rose-200 rounded-xl bg-rose-50/20">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-rose-50/80 border-b border-rose-200 font-semibold text-rose-800 uppercase text-[10px]">
+                  <th class="py-2.5 px-3 min-w-[200px]">Đạo Cụ Hỏng</th>
+                  <th class="py-2.5 px-2 text-center w-20">SL Hỏng</th>
+                  <th class="py-2.5 px-3 min-w-[140px]">Vị Trí Lưu Đồ Hỏng</th>
+                  <th class="py-2.5 px-3 min-w-[180px]">Mô Tả Hư Hại</th>
+                  <th class="py-2.5 px-3 min-w-[240px] text-center">Ảnh Hiện Trạng (Bắt buộc = SL Hỏng)</th>
+                  <th class="py-2.5 px-2 w-12 text-center">Xóa Dòng</th>
+                </tr>
+              </thead>
+              <tbody id="tab4-broken-table-body" class="divide-y divide-rose-100">
+                <!-- dynamic broken items -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Return Inspection Photo & Final Submit -->
+        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="flex items-center gap-3 w-full sm:w-auto">
+            <button type="button" onclick="openLiveCameraForUnload()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 transition">
+              <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+              <span>📸 Chụp Ảnh Dỡ Xe Về Kho (Bắt buộc)</span>
+            </button>
+            <label class="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 transition cursor-pointer">
+              <i data-lucide="upload" class="w-4 h-4 text-slate-600"></i>
+              <span>📁 Tải File Ảnh</span>
+              <input type="file" accept="image/*" class="hidden" onchange="handleUnloadPhotoUpload(event)">
+            </label>
+            <div id="tab4-unload-photo-preview" class="hidden relative w-12 h-10 rounded border border-slate-300 overflow-hidden group">
+              <img src="" alt="Dỡ xe" class="w-full h-full object-cover">
+              <button type="button" onclick="removeUnloadPhoto()" class="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-full hover:bg-red-700" title="Xóa ảnh dỡ xe">
+                <i data-lucide="x" class="w-3 h-3"></i>
+              </button>
+            </div>
+            <span id="tab4-unload-photo-status" class="text-xs text-slate-500 italic">Chưa chụp ảnh</span>
+          </div>
+
+          <button type="button" onclick="submitTab4ReturnSlip()" class="w-full sm:w-auto px-5 py-2.5 text-xs sm:text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Hoàn Tất Nhập Kho (NK_...)</span>
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 5: CHƯƠNG TRÌNH (QUẢN VẬN HÀNH & GOM ĐỒ ĐA KHO)                       -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-5" class="tab-panel hidden space-y-4">
+      
+      <!-- 2-Column Responsive Layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Left Column: Active Tours List -->
+        <div class="lg:col-span-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900">Chương Trình Đang Vận Hành</h3>
+            <span id="tab5-tours-count" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">0 Chương trình</span>
+          </div>
+
+          <!-- Search Input for Running Programs -->
+          <div class="relative">
+            <input type="text" id="tab5-search-input" placeholder="🔍 Tìm chương trình, địa điểm, phụ trách..." oninput="renderTab5()" class="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500 bg-white shadow-xs">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none"></i>
+          </div>
+
+          <div id="tab5-tour-cards" class="space-y-2.5">
+            <!-- dynamic tour cards -->
+          </div>
+        </div>
+
+        <!-- Right Column: Multi-warehouse Aggregation & Combo Grouping -->
+        <div class="lg:col-span-8 space-y-3">
+          
+          <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
+            
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+              <div>
+                <h3 id="tab5-selected-tour-title" class="text-base font-bold text-slate-900">Chi Tiết Đạo Cụ Gom Đa Kho</h3>
+                <p id="tab5-selected-tour-subtitle" class="text-xs text-slate-500">Chọn một chương trình bên trái để xem tổng hợp đạo cụ</p>
+              </div>
+
+              <!-- Button: Phân Chuyển Đồ Sang Chương Trình Khác -->
+              <button type="button" id="btn-tab5-transfer" onclick="openFieldTransferModal()" class="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition shadow-xs">
+                <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+                <span>Phân Chuyển Đồ Sang Chương Trình Khác</span>
+              </button>
+            </div>
+
+            <!-- Incoming Field Transfer Inspection Banner -->
+            <div id="tab5-incoming-transfers-banner" class="hidden"></div>
+
+            <!-- Aggregated Props List (Combos & Loose items) -->
+            <div id="tab5-props-container" class="space-y-3">
+              <div class="p-8 text-center text-slate-400 text-xs">Vui lòng chọn chương trình để xem danh sách đạo cụ</div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 6: SỬA CHỮA (QUẢN LÝ & PHỤC HỒI ĐỒ HỎNG)                             -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-6" class="tab-panel hidden space-y-4">
+      
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Quy Trình Sửa Chữa & Phục Hồi Đạo Cụ Hỏng</h2>
+          <p class="text-xs text-slate-500">Chỉ hiển thị các đạo cụ có số lượng hư hại (Broken > 0). Chọn món đồ để xử lý.</p>
+        </div>
+        <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700 flex items-center gap-1">
+          <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+          <span id="tab6-broken-badge">0 món hỏng</span>
+        </span>
+      </div>
+
+      <!-- Pending External Repairs Management Section -->
+      <div id="tab6-pending-external-banner" class="hidden p-4 bg-amber-50/80 border border-amber-300 rounded-2xl text-xs space-y-3 shadow-xs">
+        <div class="flex items-center justify-between pb-2 border-b border-amber-200">
+          <div class="font-extrabold text-amber-950 flex items-center gap-2 text-sm">
+            <i data-lucide="wrench" class="w-4 h-4 text-amber-700"></i>
+            <span>Đạo Cụ Đang Gửi Thợ Ngoài Sửa Chữa (Chờ Nghiệm Thu & Nhập Về Kho)</span>
+          </div>
+          <span id="tab6-pending-count" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-200 text-amber-900">0 đơn chờ</span>
+        </div>
+        <div id="tab6-pending-orders-list" class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <!-- dynamic pending orders -->
+        </div>
+      </div>
+
+      <!-- Grid of Broken Items (Item-Centric Cards) -->
+      <div id="tab6-broken-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+        <!-- dynamic cards -->
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 7: THANH LÝ (XỬ LÝ TÀI SẢN HỎNG NÁT)                                 -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-7" class="tab-panel hidden space-y-4">
+      
+      <div class="bg-white p-4 sm:p-6 rounded-xl border border-slate-200/80 shadow-xs max-w-4xl mx-auto space-y-4">
+        
+        <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Lập Phiếu Thanh Lý & Hủy Bỏ Tài Sản</h2>
+            <p class="text-xs text-slate-500">Xử lý đạo cụ hư hỏng nặng không thể phục hồi hoặc hết hạn sử dụng</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">
+            Thanh Lý
+          </span>
+        </div>
+
+        <form id="form-tab7-liquidation" onsubmit="handleTab7Submit(event)" class="space-y-4 text-xs">
+          
+          <!-- Liquidation Header -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Kho thực hiện <span class="text-rose-500">*</span></label>
+              <select id="tab7-warehouse" required onchange="renderTab7ItemsSelect()" class="w-full p-2 bg-white border border-slate-200 rounded-md focus:outline-none">
+                <!-- dynamic warehouses -->
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Người lập phiếu</label>
+              <input type="text" id="tab7-creator" readonly class="w-full p-2 bg-slate-100 border border-slate-200 rounded-md text-slate-600 font-medium">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Ngày thanh lý</label>
+              <input type="date" id="tab7-date" class="w-full p-2 bg-white border border-slate-200 rounded-md focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Reason -->
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Lý do thanh lý chung <span class="text-rose-500">*</span></label>
+            <input type="text" id="tab7-reason" required placeholder="Ví dụ: Rách nát sau mưa bão Bãi Cháy, cháy motor không thể sửa, hết niên hạn sử dụng..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+          </div>
+
+          <!-- Deduction Source Toggle -->
+          <div class="p-3 bg-rose-50/50 rounded-xl border border-rose-200">
+            <label class="block font-bold text-rose-900 mb-1.5">Nguồn trừ tồn kho:</label>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="flex items-center gap-2 p-2 bg-white border border-rose-200 rounded-lg cursor-pointer">
+                <input type="radio" name="tab7-source" value="BROKEN" checked class="text-rose-600 focus:ring-rose-500">
+                <span class="font-medium text-slate-800">Trừ vào nguồn ĐANG HỎNG (Khuyến nghị)</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 bg-white border border-rose-200 rounded-lg cursor-pointer">
+                <input type="radio" name="tab7-source" value="READY" class="text-rose-600 focus:ring-rose-500">
+                <span class="font-medium text-slate-800">Trừ trực tiếp vào nguồn DÙNG ĐƯỢC</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Items Table for Liquidation -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-800">Danh Sách Đạo Cụ Thanh Lý</span>
+              <button type="button" onclick="addTab7ItemRow()" class="px-2.5 py-1 font-semibold rounded bg-rose-600 text-white hover:bg-rose-700 transition">
+                + Thêm Món
+              </button>
+            </div>
+
+            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 font-semibold text-slate-600 uppercase text-[10px]">
+                    <th class="py-2.5 px-3">Tên Đạo Cụ</th>
+                    <th class="py-2.5 px-2 text-center w-20">SL Thanh Lý</th>
+                    <th class="py-2.5 px-3">Hình Thức Xử Lý</th>
+                    <th class="py-2.5 px-2 text-right w-28">Thu Hồi (VNĐ)</th>
+                    <th class="py-2.5 px-2 w-10 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody id="tab7-table-body" class="divide-y divide-slate-100">
+                  <!-- dynamic rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Submit -->
+          <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
+            <button type="submit" class="px-5 py-2.5 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition flex items-center gap-2">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Hoàn Tất Thanh Lý (TL_...)</span>
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 8: CHỨNG TỪ (THƯ VIỆN LỊCH SỬ & IN ẤN)                               -->
+    <!-- ========================================================================= -->
+    <section id="tab-panel-8" class="tab-panel hidden space-y-4">
+      
+      <!-- Filter Bar -->
+      <div class="bg-white p-3 sm:p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
+        
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          
+          <!-- Universal Search -->
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input type="text" id="tab8-search" oninput="renderTab8Documents()" placeholder="Tìm theo mã phiếu (XK_..., NK_..., DC_...), tên dự án, người lập..." class="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500">
+          </div>
+
+          <!-- Type Filter -->
+          <div class="flex items-center gap-2">
+            <select id="tab8-filter-type" onchange="renderTab8Documents()" class="text-xs py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none font-medium">
+              <option value="ALL">Tất cả loại phiếu</option>
+              <option value="Xuất kho">Xuất kho (XK_...)</option>
+              <option value="Nhập hoàn trả">Thu hồi sau chương trình (NK_...)</option>
+              <option value="Nhập lần đầu">Nhập mới lần đầu</option>
+              <option value="Điều chuyển">Điều chuyển hiện trường (DC_...)</option>
+              <option value="Sửa chữa">Sửa chữa (SC_...)</option>
+              <option value="Chuẩn bị">Phiếu chuẩn bị (CB_...)</option>
+              <option value="Thanh lý">Thanh lý (TL_...)</option>
+            </select>
+
+            <select id="tab8-filter-warehouse" onchange="renderTab8Documents()" class="text-xs py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none font-medium">
+              <option value="ALL">Tất cả kho</option>
+            </select>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Desktop Table -->
+      <div class="hidden md:block bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 font-semibold text-slate-500 uppercase text-[11px]">
+              <th class="py-3 px-3">Mã Phiếu</th>
+              <th class="py-3 px-2 text-center">Loại Phiếu</th>
+              <th class="py-3 px-3">Dự Án / Chương Trình / Mục Đích</th>
+              <th class="py-3 px-3">Kho Thực Hiện</th>
+              <th class="py-3 px-3">Người Lập</th>
+              <th class="py-3 px-3">Thời Gian</th>
+              <th class="py-3 px-2 text-center">Số Món</th>
+              <th class="py-3 px-3 text-right">Xem & In</th>
+            </tr>
+          </thead>
+          <tbody id="tab8-table-body" class="divide-y divide-slate-100">
+            <!-- dynamic document rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile Cards -->
+      <div id="tab8-mobile-cards" class="md:hidden space-y-2.5">
+        <!-- dynamic document cards -->
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== COMMON MODALS ==================== -->
+
+  <!-- 1. ITEM DETAIL & EDIT MODAL (Tab 1 Detail) -->
+  <div id="modal-item-detail" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-item-detail')"></div>
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto z-10 shadow-xl modal-content p-4 sm:p-6 space-y-4">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+          <span id="detail-code-badge" class="px-2 py-0.5 rounded text-xs font-bold bg-sky-100 text-sky-800">A-001</span>
+          <h2 id="detail-name" class="text-base sm:text-lg font-bold text-slate-900 mt-1">Tên Đạo Cụ</h2>
+        </div>
+        <button onclick="closeModal('modal-item-detail')" class="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="detail-content" class="space-y-4 text-xs">
+        <!-- Rendered dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 2. WAREHOUSE MANAGEMENT MODAL -->
+  <div id="modal-warehouse-mgmt" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-warehouse-mgmt')"></div>
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto z-10 shadow-xl modal-content p-4 sm:p-5 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <h3 class="text-base font-bold text-slate-900">Quản Lý Danh Sách Kho Bãi</h3>
+        <button onclick="closeModal('modal-warehouse-mgmt')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div id="warehouse-list" class="space-y-2">
+        <!-- dynamic warehouse cards -->
+      </div>
+
+      <!-- Add Warehouse Form -->
+      <form id="form-add-warehouse" onsubmit="handleAddWarehouse(event)" class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+        <div class="font-bold text-slate-800">+ Thêm Kho Mới</div>
+        <input type="text" id="new-wh-name" required placeholder="Tên kho (Ví dụ: Kho Đông Anh)..." class="w-full p-2 bg-white border border-slate-200 rounded-md">
+        <input type="text" id="new-wh-address" placeholder="Địa chỉ chi tiết..." class="w-full p-2 bg-white border border-slate-200 rounded-md">
+        <input type="text" id="new-wh-manager" placeholder="Người quản lý kho..." class="w-full p-2 bg-white border border-slate-200 rounded-md">
+        <button type="submit" class="w-full py-2 bg-sky-600 text-white font-bold rounded-md hover:bg-sky-700 transition">Thêm Kho</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. GAME COMBOS & TOOLSETS MANAGEMENT MODAL -->
+  <div id="modal-game-combos" class="fixed inset-0 z-50 hidden flex items-center justify-center p-2 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-game-combos')"></div>
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col z-10 shadow-2xl modal-content overflow-hidden border border-slate-200">
+      
+      <!-- Modal Header -->
+      <div class="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+            <i data-lucide="boxes" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+              Quản Lý Mẫu Game & Bộ Dụng Cụ
+              <span class="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 hidden sm:inline">[Esc] để đóng</span>
+            </h3>
+            <p class="text-[11px] text-slate-500">Tạo mẫu game teambuilding hoặc bộ dụng cụ phụ trợ kỹ thuật</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-game-combos')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition" title="Đóng (Esc)">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable container) -->
+      <div class="p-3 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        
+        <!-- SECTION 1 (TRÊN): FORM TẠO / SỬA -->
+        <form id="form-add-combo" onsubmit="handleSaveGameCombo(event)" class="p-3 sm:p-4 bg-gradient-to-b from-amber-50/40 to-slate-50/40 rounded-xl border border-amber-200 shadow-xs space-y-3 text-xs">
+          <input type="hidden" id="editing-combo-id" value="">
+          
+          <!-- Mode switcher: 2 Chức Năng (Bộ Game vs Bộ Dụng Cụ) -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-amber-200/60">
+            <div class="flex items-center gap-2">
+              <span id="form-combo-title" class="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                <i data-lucide="sparkles" class="w-4 h-4 text-amber-600"></i> + Tạo Mới Mẫu Định Sẵn
+              </span>
+              <span id="edit-mode-badge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
+                ✏️ Đang sửa mẫu
+              </span>
+            </div>
+
+            <!-- Segmented Switch: 2 Chức năng -->
+            <div class="inline-flex rounded-lg p-0.5 bg-amber-100/70 border border-amber-200 text-[11px] font-semibold">
+              <label class="cursor-pointer">
+                <input type="radio" name="combo-kind-type" id="type-game" value="GAME" checked onchange="onComboKindChanged()" class="sr-only peer">
+                <span class="px-2.5 py-1 rounded-md block transition peer-checked:bg-white peer-checked:text-amber-900 peer-checked:shadow-xs text-amber-800">
+                  🎮 Bộ Game
+                </span>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="combo-kind-type" id="type-toolset" value="TOOLSET" onchange="onComboKindChanged()" class="sr-only peer">
+                <span class="px-2.5 py-1 rounded-md block transition peer-checked:bg-white peer-checked:text-emerald-900 peer-checked:shadow-xs text-slate-600">
+                  🧰 Tạo Bộ Dụng Cụ
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Name & Category -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div class="sm:col-span-2 space-y-1">
+              <label class="block font-semibold text-slate-700 text-[11px]" id="label-combo-name">Tên bộ game *</label>
+              <input type="text" id="new-combo-name" required placeholder="Ví dụ: Bộ Bánh Xe Khổng Lồ..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none">
+            </div>
+            <div class="space-y-1">
+              <label class="block font-semibold text-slate-700 text-[11px]">Chuyên mục</label>
+              <input type="text" id="new-combo-category" placeholder="Đồ hơi, Phụ trợ..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none" list="datalist-combo-categories">
+              <datalist id="datalist-combo-categories">
+                <option value="Đồ hơi">
+                <option value="Game tự chế">
+                <option value="Dụng cụ phụ trợ">
+                <option value="Âm thanh & Kỹ thuật">
+                <option value="Phân luồng & An toàn">
+              </datalist>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div class="space-y-1">
+            <label class="block font-semibold text-slate-700 text-[11px]" id="label-combo-desc">Mô tả / Luật chơi / Hướng dẫn</label>
+            <input type="text" id="new-combo-desc" placeholder="Tóm tắt luật chơi hoặc chức năng bộ thiết bị..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none">
+          </div>
+
+          <!-- Child Items (Đạo cụ con thuộc bộ) -->
+          <div class="space-y-2 pt-1">
+            <div class="flex flex-wrap items-center justify-between gap-1.5">
+              <div class="font-semibold text-slate-700 text-[11px] flex items-center gap-1.5">
+                <span>Đạo cụ thành phần trong bộ:</span>
+                <span class="text-[10px] text-amber-600 font-normal hidden sm:inline">(⚡ Tự động thêm máy bơm + dây điện khi có đồ hơi)</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="autoAddInflatableToolset()" class="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10.5px] font-bold border border-amber-300 transition" title="Tự động thêm Máy thổi khí 1500W và Cuộn dây điện 20m">
+                  ⚡ + Kèm Bộ Bơm Hơi
+                </button>
+                <button type="button" onclick="addComboChildInputRow()" class="inline-flex items-center gap-1 px-2 py-1 rounded bg-sky-50 hover:bg-sky-100 text-sky-700 text-[10.5px] font-bold border border-sky-200 transition">
+                  <i data-lucide="plus" class="w-3 h-3"></i> Thêm món con
+                </button>
+              </div>
+            </div>
+
+            <!-- Container for child rows -->
+            <div id="combo-items-inputs" class="space-y-1.5">
+              <!-- dynamic rows -->
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-2 pt-1">
+            <button type="submit" id="btn-save-combo" class="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition flex items-center justify-center gap-1.5">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i>
+              <span id="btn-save-combo-text">Lưu Mẫu Mới</span>
+            </button>
+            <button type="button" id="btn-cancel-edit-combo" onclick="cancelEditGameCombo()" class="hidden px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg border border-slate-300 transition">
+              Hủy sửa
+            </button>
+          </div>
+        </form>
+
+        <!-- SECTION 2 (DƯỚI): TÌM KIẾM & DANH SÁCH GỌN GÀNG -->
+        <div class="space-y-2.5 pt-1">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <!-- Search bar -->
+            <div class="relative flex-1">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+              <input type="text" id="combo-search-input" oninput="renderGameCombosList()" placeholder="🔍 Tìm nhanh mẫu game, bộ dụng cụ, tên món..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none">
+            </div>
+
+            <!-- Filter tabs -->
+            <div class="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg text-[11px] font-semibold self-start sm:self-auto shrink-0 border border-slate-200/70">
+              <button type="button" onclick="setComboFilter('ALL')" id="filter-combo-all" class="px-2.5 py-1 rounded-md bg-white text-slate-800 shadow-2xs font-bold">
+                Tất cả (<span id="combo-count-all">0</span>)
+              </button>
+              <button type="button" onclick="setComboFilter('GAME')" id="filter-combo-game" class="px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900">
+                🎮 Bộ Game (<span id="combo-count-game">0</span>)
+              </button>
+              <button type="button" onclick="setComboFilter('TOOLSET')" id="filter-combo-toolset" class="px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900">
+                🧰 Dụng Cụ (<span id="combo-count-toolset">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <!-- Compact dynamic list -->
+          <div id="game-combos-list" class="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+            <!-- dynamic compact combo cards -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <datalist id="combo-item-datalist"></datalist>
+
+  <!-- 4. GOOGLE SHEETS SYNC MODAL -->
+  <div id="modal-gsheet" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-gsheet')"></div>
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto z-10 shadow-xl modal-content p-4 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+            <i data-lucide="sheet" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Cấu Hình Kết Nối Google Sheet</h3>
+            <p class="text-xs text-slate-500">Đồng bộ dữ liệu thời gian thực 2 chiều</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-gsheet')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Google Apps Script Web App URL:</label>
+          <input type="text" id="gsheet-webhook-url" placeholder="https://script.google.com/macros/s/..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 space-y-1">
+          <div class="font-bold">Mã Google Apps Script sẵn có:</div>
+          <p class="text-[11px]">Chỉ cần dán mã script vào Extensions -> Apps Script của Sheet là xong.</p>
+          <button type="button" onclick="copyAppsScriptCode()" class="mt-1 px-3 py-1 bg-emerald-600 text-white rounded text-xs font-semibold hover:bg-emerald-700 transition">
+            Sao chép mã Apps Script
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" onclick="testGSheetConnection()" class="px-3 py-2 border border-slate-300 rounded-lg font-semibold hover:bg-slate-50 transition">
+            Kiểm tra kết nối
+          </button>
+          <button type="button" onclick="saveGSheetConfig()" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition">
+            Lưu Cấu Hình
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. ADMIN PASSWORD AUTH MODAL (Protected Lock/Switch) -->
+  <div id="modal-admin-lock" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-admin-lock')"></div>
+    <div class="bg-white rounded-2xl max-w-sm w-full z-10 shadow-xl modal-content p-5 space-y-4">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
+          <i data-lucide="shield-check" class="w-6 h-6 text-sky-600"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900">Xác Thực Quản Trị</h3>
+        <p class="text-xs text-slate-500">Nhập mật khẩu Admin để khóa hoặc chuyển tài khoản</p>
+      </div>
+
+      <div class="space-y-3">
+        <input type="password" id="admin-pass-input" placeholder="Mật khẩu Admin (mặc định: admin123)..." class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500">
+        <button type="button" onclick="verifyAdminPassword()" class="w-full py-2.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition">
+          Xác Nhận & Thoát Tài Khoản
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. USER LOGIN / ROLE PERMISSIONS MODAL -->
+  <div id="modal-user-login" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm" onclick="closeModal('modal-user-login')"></div>
+    <div class="bg-white rounded-2xl max-w-md w-full z-10 shadow-2xl modal-content p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-xl bg-sky-600 flex items-center justify-center text-white font-bold text-sm">
+            ABA
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">Tài Khoản & Phân Quyền</h3>
+            <p class="text-[10px] text-slate-500">Phân quyền Thủ kho, Quản trị và Thông thường</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-user-login')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Quick Switch Account Buttons -->
+      <div class="space-y-1.5">
+        <label class="block font-bold text-[11px] text-slate-700">Chuyển nhanh tài khoản:</label>
+        <div id="quick-user-switch-list" class="grid grid-cols-2 gap-2 text-xs">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <div class="space-y-3 text-xs pt-1 border-t border-slate-100">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Chọn tài khoản chỉnh sửa:</label>
+          <select id="login-phone-select" onchange="handleLoginSelectChange(this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium focus:ring-1 focus:ring-sky-500">
+            <!-- dynamic pre-authorized users -->
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Giao vai trò / Phân quyền:</label>
+          <select id="login-role-select" onchange="handleUserRoleChange(this.value)" class="w-full p-2 bg-amber-50/60 border border-amber-300 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-amber-500">
+            <option value="KEEPER">⭐ Thủ kho (Nhận & duyệt tất cả thao tác kho)</option>
+            <option value="ADMIN">👑 Quản trị hệ thống (Toàn quyền quản lý & cấu hình)</option>
+            <option value="STAFF">👤 Tài khoản thông thường (Nhân sự / Điều hành hiện trường)</option>
+          </select>
+        </div>
+
+        <div id="face-id-section" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-center">
+          <div class="text-[11px] font-semibold text-slate-700">Ảnh nhận diện / Chữ ký nhân sự:</div>
+          <div class="w-16 h-16 mx-auto rounded-full overflow-hidden border-2 border-sky-400 bg-slate-200 shadow-xs">
+            <img id="login-face-preview" src="" alt="Face" class="w-full h-full object-cover">
+          </div>
+          <button type="button" onclick="openLiveCameraForUserAvatar()" class="text-xs font-semibold px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-sky-700 hover:bg-sky-50 transition">
+            <i data-lucide="camera" class="w-3.5 h-3.5 inline mr-1"></i>
+            Chụp Lại Ảnh
+          </button>
+        </div>
+
+        <button type="button" onclick="confirmLogin()" class="w-full py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition shadow-md shadow-sky-600/20">
+          Lưu Phân Quyền & Vào Phiên Làm Việc
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. FORMAL DISPATCH INSPECTION MODAL (Tab 3 Mandatory Photos) -->
+  <div id="modal-tab3-inspection" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-tab3-inspection')"></div>
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto z-10 shadow-xl modal-content p-5 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Nghiệm Thu Xuất Đạo Cụ Lên Xe</h3>
+          <p class="text-xs text-slate-500">Kiểm tra ảnh nghiệm thu và xác nhận xuất đồ chính thức</p>
+        </div>
+        <button onclick="closeModal('modal-tab3-inspection')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        
+        <!-- Photo 1: Team Photo -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+          <div class="flex items-center justify-between font-semibold text-slate-800">
+            <span>1. Ảnh tập hợp đội ngũ phụ trách xuất đồ:</span>
+          </div>
+          <button type="button" onclick="triggerCameraCapture('tab3-photo-team-preview-modal')" class="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5">
+            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+            <span>Chụp / Tải Ảnh Đội Ngũ</span>
+          </button>
+          <div id="tab3-photo-team-preview-modal" class="hidden relative h-32 rounded-lg border border-slate-200 overflow-hidden">
+            <img src="" alt="Team photo" class="w-full h-full object-cover">
+          </div>
+        </div>
+
+        <!-- Photo 2: Loaded Truck Photo -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+          <div class="flex items-center justify-between font-semibold text-slate-800">
+            <span>2. Ảnh nghiệm thu đạo cụ xếp gọn gàng trên xe tải <span class="text-rose-500">*</span></span>
+          </div>
+          <button type="button" onclick="triggerCameraCapture('tab3-photo-truck-preview')" class="w-full py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5">
+            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+            <span>Chụp Ảnh Xe Tải & Đạo Cụ</span>
+          </button>
+          <div id="tab3-photo-truck-preview" class="hidden relative h-32 rounded-lg border border-slate-200 overflow-hidden">
+            <img src="" alt="Truck photo" class="w-full h-full object-cover">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Ghi chú xuất kho:</label>
+          <input type="text" id="tab3-notes" placeholder="Biển số xe, tên lái xe, số điện thoại liên hệ..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg">
+        </div>
+
+        <button type="button" onclick="submitFormalDispatchSlip()" class="w-full py-2.5 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition shadow-md shadow-sky-600/20">
+          Xác Nhận & Hoàn Tất Phiếu Xuất (XK_...)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. STREAMLINED FIELD-TO-FIELD TRANSFER MODAL (Tab 5) -->
+  <div id="modal-field-transfer" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-field-transfer')"></div>
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto z-10 shadow-xl modal-content p-4 sm:p-5 space-y-3.5">
+      
+      <!-- Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h3 class="text-base font-bold text-purple-900">Điều Chuyển Đạo Cụ Tại Hiện Trường</h3>
+          <p class="text-[11px] text-slate-500">Chuyển đồ trực tiếp giữa các chương trình không qua kho</p>
+        </div>
+        <button onclick="closeModal('modal-field-transfer')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        
+        <!-- Source Tour & Target Destinations Management -->
+        <div class="p-3 bg-purple-50/70 rounded-xl border border-purple-200 space-y-2">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <div>
+              <span class="text-slate-500 text-[11px]">Chương trình xuất chuyển:</span>
+              <strong id="transfer-source-tour-name" class="text-purple-950 font-bold ml-1 text-xs">...</strong>
+            </div>
+            <button type="button" onclick="addTransferDestination()" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-1 shadow-xs self-start sm:self-auto">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>+ Thêm Chương Trình Tiếp Nhận</span>
+            </button>
+          </div>
+
+          <!-- Dynamic destination program selects & New Program inputs -->
+          <div id="transfer-destinations-container" class="space-y-2 pt-1">
+          </div>
+        </div>
+
+        <!-- Quick Shortcut: Chuyển toàn bộ 100% -->
+        <div class="flex items-center justify-between gap-2 px-1">
+          <span class="text-[11px] text-slate-500 italic">💡 Mẹo: Bấm vào tên Bộ Game để thu gọn/mở rộng. Nhập số lượng bộ trực tiếp để phân bổ tức thì.</span>
+          <button type="button" onclick="transferAll100Percent()" class="px-3 py-1 text-xs font-bold rounded-lg bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-200 transition shrink-0">
+            ⚡ Chuyển Toàn Bộ (100%)
+          </button>
+        </div>
+
+        <!-- Streamlined Transfer Table -->
+        <div class="overflow-x-auto border border-slate-200 rounded-xl max-h-72">
+          <table class="w-full text-left text-xs border-collapse" id="transfer-main-table">
+            <!-- dynamic items rendered with direct combo set inputs -->
+          </table>
+        </div>
+
+        <!-- Validation message banner -->
+        <div id="transfer-validation-warning" class="hidden p-2.5 rounded-lg bg-rose-50 border border-rose-300 text-rose-700 font-bold text-xs flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 text-rose-600"></i>
+          <span id="transfer-warning-text"></span>
+        </div>
+
+        <button type="button" onclick="submitMultiFieldTransfer()" class="w-full py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold rounded-xl transition shadow-sm text-xs sm:text-sm flex items-center justify-center gap-2">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Lập Phiếu Điều Chuyển (DC_...)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8.1. MODAL: RECIPIENT CHECK-IN & CONFIRMATION (Biên Bản Tiếp Nhận & Kiểm Đếm Đạo Cụ) -->
+  <div id="modal-receive-field-transfer" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-receive-field-transfer')"></div>
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto z-10 shadow-xl modal-content p-4 sm:p-5 space-y-3.5">
+      
+      <!-- Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h3 class="text-base font-bold text-emerald-900">Kiểm Đếm & Tiếp Nhận Đạo Cụ Điều Chuyển</h3>
+          <p class="text-[11px] text-slate-500">Đối soát số lượng thực nhận so với phiếu chuyển từ hiện trường</p>
+        </div>
+        <button onclick="closeModal('modal-receive-field-transfer')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Transfer Info Banner -->
+      <div class="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+        <div>
+          <div><span class="text-slate-500">Mã điều chuyển:</span> <strong id="rec-transfer-code" class="text-emerald-950 font-extrabold font-mono">...</strong></div>
+          <div><span class="text-slate-500">Nơi gửi đi:</span> <strong id="rec-transfer-source" class="text-slate-800">...</strong></div>
+          <div><span class="text-slate-500">Người gửi:</span> <strong id="rec-transfer-sender" class="text-slate-800">...</strong></div>
+        </div>
+        <div>
+          <div><span class="text-slate-500">Nơi tiếp nhận:</span> <strong id="rec-transfer-dest" class="text-slate-800">...</strong></div>
+          <div><span class="text-slate-500">Người nhận (bạn):</span> <strong id="rec-transfer-receiver" class="text-emerald-900 font-bold">...</strong></div>
+          <div><span class="text-slate-500">Thời gian lập:</span> <span id="rec-transfer-time" class="text-slate-600">...</span></div>
+        </div>
+      </div>
+
+      <!-- Items Checklist Table -->
+      <div class="space-y-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-xs text-slate-700">Danh mục đạo cụ bàn giao:</span>
+          <button type="button" onclick="tickAllReceivedTransferItems()" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 transition flex items-center gap-1 shadow-xs">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            <span>Tích nhận đủ tất cả</span>
+          </button>
+        </div>
+
+        <div class="overflow-x-auto border border-slate-200 rounded-xl max-h-72">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-700 text-[11px]">
+                <th class="py-2.5 px-3 w-12 text-center">Tích</th>
+                <th class="py-2.5 px-3 min-w-[200px]">Tên Đạo Cụ</th>
+                <th class="py-2.5 px-2 text-center w-16">ĐVT</th>
+                <th class="py-2.5 px-2 text-center w-24">SL Gửi Đi</th>
+                <th class="py-2.5 px-2 text-center w-28 bg-emerald-50/50 text-emerald-800">SL Thực Nhận</th>
+                <th class="py-2.5 px-2 text-center w-24">Tình Trạng</th>
+              </tr>
+            </thead>
+            <tbody id="rec-transfer-items-body" class="divide-y divide-slate-100">
+              <!-- dynamic rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Action Confirmation Button -->
+      <div class="pt-1">
+        <button type="button" onclick="confirmReceiveTransfer()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition shadow-sm text-xs sm:text-sm flex items-center justify-center gap-2">
+          <i data-lucide="check-check" class="w-4 h-4"></i>
+          <span>Xác Nhận Đã Nhận Đồ (Tự động gửi thông báo cho bên gửi)</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 9. REPAIR WORKFLOW MODALS (Tab 6) -->
+  <div id="modal-repair-workflow" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-repair-workflow')"></div>
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto z-10 shadow-xl modal-content p-5 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h3 id="repair-item-name" class="text-base font-bold text-slate-900">Xử Lý Sửa Chữa</h3>
+          <p id="repair-item-broken-qty" class="text-xs text-rose-600 font-semibold">Đang hỏng: 0</p>
+        </div>
+        <button onclick="closeModal('modal-repair-workflow')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Damage Photos History Gallery -->
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+        <span class="text-[11px] font-bold text-slate-700">Lịch sử ảnh báo hỏng (từ phiếu thu hồi):</span>
+        <div id="repair-damage-photos-gallery" class="flex items-center gap-2 overflow-x-auto py-1">
+          <!-- damage photos thumbnails -->
+        </div>
+      </div>
+
+      <!-- 2 Workflow Tabs -->
+      <div class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="toggleRepairMode('IN_HOUSE')" id="btn-mode-inhouse" class="py-2 px-3 font-bold rounded-lg border border-sky-500 bg-sky-50 text-sky-700">
+            1. Tự Sửa Nội Bộ
+          </button>
+          <button type="button" onclick="toggleRepairMode('EXTERNAL')" id="btn-mode-external" class="py-2 px-3 font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+            2. Gửi Thợ Ngoài
+          </button>
+        </div>
+
+        <!-- Mode 1: In-house repair form -->
+        <div id="repair-inhouse-form" class="space-y-3 pt-2">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Kết quả sửa chữa:</label>
+            <select id="inhouse-result" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium">
+              <option value="SUCCESS">Đã sửa tốt (Phục hồi vào kho)</option>
+              <option value="FAILED">Không thể sửa (Chuyển chờ thanh lý)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Số lượng xử lý:</label>
+            <input type="number" id="inhouse-qty" min="1" value="1" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Vị trí cất lại khi đã sửa xong:</label>
+            <input type="text" id="inhouse-shelf" placeholder="Kệ A1, Tủ phao..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg">
+          </div>
+          <button type="button" onclick="submitInHouseRepair()" class="w-full py-2.5 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition">
+            Hoàn Tất Nghiệm Thu Tự Sửa
+          </button>
+        </div>
+
+        <!-- Mode 2: External send out form -->
+        <div id="repair-external-form" class="hidden space-y-3 pt-2">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Tên đơn vị / Thợ sửa ngoài: <span class="text-rose-500">*</span></label>
+            <input type="text" id="ext-vendor" placeholder="Xưởng cơ điện Tuấn Vũ..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Số điện thoại đơn vị:</label>
+            <input type="text" id="ext-phone" placeholder="09xxxxxxxx..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Chi phí dự kiến (VNĐ):</label>
+              <input type="text" id="ext-est-cost" oninput="formatCurrencyInput(this)" placeholder="300,000" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Số lượng gửi đi:</label>
+              <input type="number" id="ext-qty" min="1" value="1" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold">
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Yêu cầu kỹ thuật:</label>
+            <input type="text" id="ext-notes" placeholder="Thay bạc đạn, vá bạt nóng..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg">
+          </div>
+
+          <!-- Damage photos before sending out (Ảnh hiện trạng) -->
+          <div class="space-y-1.5 pt-1 border-t border-slate-200">
+            <div class="flex items-center justify-between">
+              <label class="block font-bold text-slate-700 text-xs">Ảnh hiện trạng trước khi gửi thợ ngoài:</label>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="openCameraForExternalRepair()" class="px-2 py-1 text-[11px] font-bold rounded border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center gap-1">
+                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                  <span>Chụp ảnh</span>
+                </button>
+                <label class="px-2 py-1 text-[11px] font-bold rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1 cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                  <span>Tải file</span>
+                  <input type="file" accept="image/*" class="hidden" onchange="handleExternalRepairPhotoUpload(event)">
+                </label>
+              </div>
+            </div>
+            <div id="ext-repair-photos-gallery" class="flex flex-wrap gap-2 p-2 min-h-[50px] bg-slate-50 rounded-lg border border-slate-200">
+              <span class="text-slate-400 italic text-[11px]">Chưa có ảnh hiện trạng gửi sửa</span>
+            </div>
+          </div>
+
+          <button type="button" onclick="submitSendExternalRepair()" class="w-full py-2.5 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition">
+            Lập Phiếu Gửi Đi Sửa (SC_OUT_...)
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 9.1 MODAL: NGHIỆM THU & NHẬP KHO SAU SỬA CHỮA (Tab 6) -->
+  <div id="modal-receive-repaired" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-receive-repaired')"></div>
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto z-10 shadow-xl modal-content p-5 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Nghiệm Thu & Nhập Về Kho Sau Sửa Chữa</h3>
+          <p id="recv-order-code" class="text-xs text-emerald-600 font-semibold">Mã đơn: ...</p>
+        </div>
+        <button onclick="closeModal('modal-receive-repaired')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Summary of Order -->
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+        <div class="flex justify-between">
+          <span class="text-slate-500">Đạo cụ:</span>
+          <strong id="recv-item-name" class="text-slate-900">...</strong>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Số lượng gửi đi:</span>
+          <strong id="recv-item-qty" class="text-slate-900">...</strong>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Đơn vị sửa ngoài:</span>
+          <span id="recv-vendor-info" class="text-slate-700 font-medium">...</span>
+        </div>
+        <div id="recv-sent-photos-box" class="pt-1">
+          <span class="text-slate-500 text-[11px] block mb-1">Ảnh hiện trạng lúc gửi đi:</span>
+          <div id="recv-sent-photos-gallery" class="flex gap-2 overflow-x-auto py-1"></div>
+        </div>
+      </div>
+
+      <!-- Receive Form -->
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Kết quả nghiệm thu sau sửa: <span class="text-rose-500">*</span></label>
+          <select id="recv-result-status" class="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-800">
+            <option value="SUCCESS">Đã sửa hoàn thiện, đạt chuẩn (Nhập lại kho sẵn sàng)</option>
+            <option value="FAILED">Không thể sửa được / Thợ trả về (Chuyển kho hỏng/chờ thanh lý)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Chi phí sửa thực tế (VNĐ):</label>
+            <input type="text" id="recv-actual-cost" oninput="formatCurrencyInput(this)" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900" placeholder="300,000">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Kho tiếp nhận nhập về:</label>
+            <select id="recv-warehouse-select" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-medium"></select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Kệ / Giá cất:</label>
+            <input type="text" id="recv-target-shelf" placeholder="Kệ Máy Điện D1..." class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Số tầng:</label>
+            <input type="text" id="recv-target-tier" placeholder="Tầng 1..." class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <!-- Repaired Photos -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="font-bold text-slate-700">Ảnh nghiệm thu sau khi sửa:</label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="openCameraForReceiveRepair()" class="px-2 py-1 text-[11px] font-bold rounded border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1">
+                <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                <span>Chụp ảnh</span>
+              </button>
+              <label class="px-2 py-1 text-[11px] font-bold rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1 cursor-pointer">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                <span>Gửi file</span>
+                <input type="file" accept="image/*" class="hidden" onchange="handleReceiveRepairPhotoUpload(event)">
+              </label>
+            </div>
+          </div>
+          <div id="recv-repair-photos-gallery" class="flex flex-wrap gap-2 p-2 min-h-[50px] bg-slate-50 rounded-lg border border-slate-200">
+            <span class="text-slate-400 italic text-[11px]">Chưa có ảnh sau sửa</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Ghi chú nghiệm thu:</label>
+          <textarea id="recv-notes" rows="2" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs" placeholder="Đã kiểm tra động cơ, chạy êm, đủ phụ kiện kèm theo..."></textarea>
+        </div>
+
+        <button type="button" onclick="submitReceiveRepairedItem()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition shadow-xs flex items-center justify-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Xác Nhận Nhập Về Kho (Lập Phiếu SC_IN_...)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE CAMERA VIEWFINDER MODAL -->
+  <div id="modal-live-camera" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-xs" onclick="closeLiveCamera()"></div>
+    <div class="bg-slate-900 rounded-2xl max-w-lg w-full overflow-hidden z-10 shadow-2xl modal-content p-4 space-y-3 border border-slate-700 text-white">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+        <div class="flex items-center gap-2">
+          <i data-lucide="camera" class="w-5 h-5 text-sky-400"></i>
+          <h3 class="text-sm font-bold text-white">Máy Ảnh Trực Tiếp</h3>
+        </div>
+        <button type="button" onclick="closeLiveCamera()" class="p-1 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      
+      <!-- Viewfinder Screen -->
+      <div class="relative bg-black rounded-xl overflow-hidden aspect-4/3 flex items-center justify-center border border-slate-800">
+        <video id="live-camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+        <canvas id="live-camera-canvas" class="hidden"></canvas>
+        <div id="camera-loading-spinner" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-xs text-slate-300 gap-2">
+          <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-sky-400"></i>
+          <span>Đang khởi động máy ảnh...</span>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center justify-between pt-1">
+        <button type="button" onclick="switchCameraFacing()" id="btn-switch-camera" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 transition">
+          <i data-lucide="refresh-cw" class="w-4 h-4 text-sky-400"></i>
+          <span>Đổi camera</span>
+        </button>
+
+        <!-- Big Capture Button -->
+        <button type="button" onclick="captureLivePhoto()" class="w-14 h-14 rounded-full bg-white border-4 border-sky-500 hover:bg-sky-50 active:scale-95 transition shadow-lg flex items-center justify-center text-slate-900" title="Bấm để chụp ảnh">
+          <div class="w-10 h-10 rounded-full bg-red-600"></div>
+        </button>
+
+        <button type="button" onclick="closeLiveCamera()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. DOCUMENT A4 PRINT & PREVIEW MODAL (Tab 8) -->
+  <div id="modal-document-detail" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay overflow-y-auto">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-document-detail')"></div>
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto z-10 shadow-2xl modal-container modal-content p-6 sm:p-8 space-y-6">
+      
+      <!-- Top Action Bar (Hide in print) -->
+      <div class="flex items-center justify-between no-print pb-3 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <span id="doc-type-badge" class="px-2.5 py-1 rounded text-xs font-bold bg-sky-100 text-sky-800">Xuất kho</span>
+          <span id="doc-code-text" class="text-sm font-bold text-slate-800">XK_20261028_01</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition flex items-center gap-1.5 shadow-xs">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>In Phiếu A4</span>
+          </button>
+          <button onclick="closeModal('modal-document-detail')" class="p-1.5 text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Printable A4 Document Body -->
+      <div id="printable-slip-content" class="space-y-5 text-slate-900">
+        <!-- Rendered dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Universal Camera / Photo Capture Input -->
+  <input type="file" id="universal-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleCameraInputChange(event)">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full px-3"></div>
+
+  <!-- Application Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
