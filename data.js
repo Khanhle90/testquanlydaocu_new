@@ -4,15 +4,16 @@
  */
 
 const INITIAL_WAREHOUSES = [
-  { id: "WH-MD", code: "KHO-MD", name: "Kho Tổng Mỹ Đình (Hà Nội)", address: "Số 15 Lê Đức Thọ, Nam Từ Liêm, HN", manager: "Nguyễn Văn An", isDefault: true },
-  { id: "WH-HD", code: "KHO-HD", name: "Kho Đồ Hơi Hà Đông", address: "Khu đất dịch vụ Yên Nghĩa, Hà Đông, HN", manager: "Trần Văn Bình", isDefault: false },
-  { id: "WH-LB", code: "KHO-LB", name: "Kho Thiết Bị Long Biên", address: "Gia Thụy, Long Biên, Hà Nội", manager: "Phạm Hải Long", isDefault: false }
+  { id: "WH-MD", code: "KHO-MD", name: "Kho Tổng Mỹ Đình (Hà Nội)", address: "Số 15 Lê Đức Thọ, Nam Từ Liêm, HN", manager: "Nguyễn Văn An", isDefault: true, mapImage: "" },
+  { id: "WH-HD", code: "KHO-HD", name: "Kho Đồ Hơi Hà Đông", address: "Khu đất dịch vụ Yên Nghĩa, Hà Đông, HN", manager: "Trần Văn Bình", isDefault: false, mapImage: "" },
+  { id: "WH-LB", code: "KHO-LB", name: "Kho Thiết Bị Long Biên", address: "Gia Thụy, Long Biên, Hà Nội", manager: "Phạm Hải Long", isDefault: false, mapImage: "" }
 ];
 
 const INITIAL_USERS = [
   {
     id: "U01",
     phone: "0912345678",
+    password: "0912345678",
     name: "Nguyễn Văn An",
     role: "Thủ kho trưởng",
     roleType: "KEEPER",
@@ -20,12 +21,14 @@ const INITIAL_USERS = [
     isAdmin: true,
     avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
     faceRegistered: true,
+    hasLoggedIn: true,
     device: "iPhone 15 Pro Max (iOS 18.2)",
     lastLogin: "2026-10-30 07:15"
   },
   {
     id: "U02",
     phone: "0987654321",
+    password: "0987654321",
     name: "Trần Thị Bình",
     role: "Điều hành Chương trình",
     roleType: "STAFF",
@@ -33,12 +36,14 @@ const INITIAL_USERS = [
     isAdmin: false,
     avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
     faceRegistered: true,
+    hasLoggedIn: true,
     device: "Samsung Galaxy S24 (Android 15)",
     lastLogin: "2026-10-30 06:45"
   },
   {
     id: "U03",
     phone: "0905123456",
+    password: "0905123456",
     name: "Lê Hoàng Nam",
     role: "Quản trị hệ thống",
     roleType: "ADMIN",
@@ -46,12 +51,14 @@ const INITIAL_USERS = [
     isAdmin: true,
     avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
     faceRegistered: true,
+    hasLoggedIn: true,
     device: "Xiaomi 14 Pro",
     lastLogin: "2026-10-29 18:20"
   },
   {
     id: "U04",
     phone: "0933445566",
+    password: "0933445566",
     name: "Trần Văn Bình",
     role: "Kỹ thuật / Nhân viên",
     roleType: "STAFF",
@@ -59,6 +66,7 @@ const INITIAL_USERS = [
     isAdmin: false,
     avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
     faceRegistered: true,
+    hasLoggedIn: true,
     device: "Oppo Find X7",
     lastLogin: "2026-10-29 19:30"
   }
@@ -129,11 +137,10 @@ const INITIAL_GAME_COMBOS = [
     name: "Bộ Dụng Cụ Bơm Hơi Tiêu Chuẩn",
     type: "TOOLSET",
     category: "Dụng cụ phụ trợ",
-    description: "Bộ máy thổi khí kèm cuộn dây điện nguồn 20m và ổ cắm chịu tải chuyên dụng cho đồ hơi.",
+    description: "Bộ máy thổi khí kèm cuộn dây điện nguồn 20m phục vụ đạo cụ đồ hơi (không gồm ổ cắm).",
     items: [
       { itemId: "A004", name: "Máy thổi khí công suất lớn 1500W", unit: "Chiếc", quantityPerSet: 1 },
-      { itemId: "A013", name: "Cuộn dây điện nguồn 20m", unit: "Cuộn", quantityPerSet: 1 },
-      { itemId: "TOOL-PLUG-01", name: "Ổ cắm điện đa năng chịu tải", unit: "Chiếc", quantityPerSet: 1 }
+      { itemId: "A013", name: "Cuộn dây điện nguồn 20m", unit: "Cuộn", quantityPerSet: 1 }
     ]
   },
   {

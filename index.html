@@ -42,7 +42,7 @@
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col selection:bg-sky-500 selection:text-white">
 
   <!-- ==================== HEADER & TOPBAR ==================== -->
-  <header class="glass-header sticky top-0 z-40 px-3 py-2 sm:px-6 sm:py-2.5 transition-all shadow-sm">
+  <header class="glass-header sticky top-0 z-50 px-3 py-2 sm:px-6 sm:py-2.5 transition-all shadow-xs">
     <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
       
       <!-- Brand & Title: On mobile, hide title text to keep it ultra compact -->
@@ -60,17 +60,27 @@
       </div>
 
       <!-- Quick Action Shortcuts & Status -->
-      <div class="flex items-center gap-1.5 sm:gap-2.5">
+      <div class="flex items-center gap-1.5 sm:gap-2">
         
-        <!-- Google Sheet Status Badge: On mobile only show pulsating dot, no text -->
+        <!-- Google Sheet Status Badge: Dịch sang trái -->
         <button id="btn-gsheet-status" onclick="openGSheetModal()" class="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition shadow-xs" title="Bấm để cấu hình đồng bộ Google Sheet">
           <span id="gsheet-pulse" class="w-2.5 h-2.5 rounded-full bg-emerald-500 live-pulse"></span>
           <span id="gsheet-text" class="hidden sm:inline">Google Sheet: Đã kết nối</span>
         </button>
 
+        <!-- Quick Shortcut: Bản Đồ Kho (Cạnh icon kho) -->
+        <button id="btn-header-warehouse-map" onclick="openWarehouseMap()" class="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50/80 hover:bg-sky-100 text-xs font-medium text-sky-800 transition shadow-xs" title="Xem sơ đồ bản đồ kho & vị trí giá kệ">
+          <svg class="w-4 h-4 text-sky-600 shrink-0 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+            <line x1="9" y1="3" x2="9" y2="18"/>
+            <line x1="15" y1="6" x2="15" y2="21"/>
+          </svg>
+          <span class="hidden md:inline ml-0.5 font-bold">Bản Đồ</span>
+        </button>
+
         <!-- Quick Shortcut: Kho Bãi (Authentic Warehouse Icon) -->
         <button onclick="openWarehouseModal()" class="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition" title="Quản lý danh sách kho bãi">
-          <svg class="w-4 h-4 text-sky-600 shrink-0 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="w-4 h-4 text-slate-600 shrink-0 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
             <path d="M7 21v-7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7"/>
             <path d="M10 13h4"/>
@@ -114,9 +124,9 @@
           <span class="hidden md:inline ml-1">Làm mới</span>
         </button>
 
-        <!-- User Identity / Lock & Switch -->
+        <!-- User Identity & Security -->
         <div class="flex items-center gap-2 pl-1 sm:pl-2 border-l border-slate-200">
-          <button onclick="openUserModal()" class="flex items-center gap-1.5 text-left hover:opacity-85 transition group" title="Bấm để đổi tài khoản hoặc phân quyền">
+          <button onclick="openUserProfileModal()" class="flex items-center gap-1.5 text-left hover:opacity-85 transition group" title="Bấm vào ảnh để cài đặt lại Mật khẩu & Hồ sơ cá nhân">
             <img id="user-avatar" src="" alt="Avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-sky-500/30">
             <div class="hidden lg:block leading-tight">
               <div id="user-name" class="text-xs font-bold text-slate-800">Đang tải...</div>
@@ -126,8 +136,8 @@
             </div>
           </button>
           
-          <button onclick="openLockAdminModal()" class="p-1.5 text-slate-400 hover:text-rose-600 transition" title="Khóa / Đổi tài khoản (Mật khẩu Admin)">
-            <i data-lucide="lock" class="w-4 h-4"></i>
+          <button onclick="requestLogout()" class="p-1.5 text-slate-400 hover:text-rose-600 transition" title="Đăng xuất khỏi hệ thống (Cần mật khẩu Quản trị)">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
           </button>
         </div>
 
@@ -227,61 +237,61 @@
     <!-- ========================================================================= -->
     <section id="tab-panel-1" class="tab-panel space-y-4">
       
-      <!-- Top Metrics: 5 Chỉ Số Tồn Kho Chuẩn Xác -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-4">
+      <!-- Top Metrics: 5 Chỉ Số Tồn Kho Chuẩn Xác (Thiết kế tinh gọn, tiết kiệm diện tích) -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
         
         <!-- Sẵn sàng -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-emerald-100 shadow-xs flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-emerald-100 shadow-2xs flex items-center gap-2.5">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <i data-lucide="check-circle-2" class="w-4 h-4 sm:w-4.5 sm:h-4.5"></i>
           </div>
-          <div>
-            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Sẵn Sàng (Dùng)</div>
-            <div id="stat-ready" class="text-lg sm:text-2xl font-bold text-emerald-600">0</div>
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] text-slate-500 font-semibold truncate leading-tight">Sẵn Sàng (Dùng)</div>
+            <div id="stat-ready" class="text-base sm:text-xl font-black text-emerald-600 leading-tight">0</div>
           </div>
         </div>
 
         <!-- Đang đi -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-amber-100 shadow-xs flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-            <i data-lucide="truck" class="w-5 h-5"></i>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-amber-100 shadow-2xs flex items-center gap-2.5">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <i data-lucide="truck" class="w-4 h-4 sm:w-4.5 sm:h-4.5"></i>
           </div>
-          <div>
-            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Đang Đi (C.Trình)</div>
-            <div id="stat-inuse" class="text-lg sm:text-2xl font-bold text-amber-600">0</div>
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] text-slate-500 font-semibold truncate leading-tight">Đang Đi (C.Trình)</div>
+            <div id="stat-inuse" class="text-base sm:text-xl font-black text-amber-600 leading-tight">0</div>
           </div>
         </div>
 
         <!-- Hỏng -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-rose-100 shadow-xs flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-rose-100 shadow-2xs flex items-center gap-2.5">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <i data-lucide="alert-triangle" class="w-4 h-4 sm:w-4.5 sm:h-4.5"></i>
           </div>
-          <div>
-            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Đang Hỏng</div>
-            <div id="stat-broken" class="text-lg sm:text-2xl font-bold text-rose-600">0</div>
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] text-slate-500 font-semibold truncate leading-tight">Đang Hỏng</div>
+            <div id="stat-broken" class="text-base sm:text-xl font-black text-rose-600 leading-tight">0</div>
           </div>
         </div>
 
         <!-- Tại kho -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-sky-100 shadow-xs flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
-            <i data-lucide="archive" class="w-5 h-5"></i>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-sky-100 shadow-2xs flex items-center gap-2.5">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+            <i data-lucide="archive" class="w-4 h-4 sm:w-4.5 sm:h-4.5"></i>
           </div>
-          <div>
-            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Tại Kho Bãi</div>
-            <div id="stat-instock" class="text-lg sm:text-2xl font-bold text-sky-600">0</div>
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] text-slate-500 font-semibold truncate leading-tight">Tại Kho Bãi</div>
+            <div id="stat-instock" class="text-base sm:text-xl font-black text-sky-600 leading-tight">0</div>
           </div>
         </div>
 
         <!-- Tổng tài sản -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl border border-purple-100 shadow-xs flex items-center gap-3 col-span-2 sm:col-span-1">
-          <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-            <i data-lucide="layers" class="w-5 h-5"></i>
+        <div class="bg-white p-2.5 sm:p-3 rounded-xl border border-purple-100 shadow-2xs flex items-center gap-2.5 col-span-2 sm:col-span-1">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <i data-lucide="layers" class="w-4 h-4 sm:w-4.5 sm:h-4.5"></i>
           </div>
-          <div>
-            <div class="text-[11px] sm:text-xs text-slate-500 font-medium">Tổng Tài Sản</div>
-            <div id="stat-total" class="text-lg sm:text-2xl font-bold text-purple-600">0</div>
+          <div class="min-w-0">
+            <div class="text-[10px] sm:text-[11px] text-slate-500 font-semibold truncate leading-tight">Tổng Tài Sản</div>
+            <div id="stat-total" class="text-base sm:text-xl font-black text-purple-600 leading-tight">0</div>
           </div>
         </div>
 
@@ -403,7 +413,7 @@
         <!-- Header: Title & Reset Button -->
         <div class="flex items-center justify-between pb-3 border-b border-slate-200">
           <div>
-            <h2 class="text-lg sm:text-xl font-bold text-sky-900 tracking-tight">PHIẾU NHẬP KHO LẦN ĐẦU</h2>
+            <h2 class="text-base sm:text-lg font-bold text-sky-900 tracking-tight">PHIẾU NHẬP KHO LẦN ĐẦU</h2>
             <p class="text-xs text-slate-500">Tự động sinh chứng từ lưu Thư Viện</p>
           </div>
           <button type="button" onclick="resetTab2Form()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
@@ -428,7 +438,7 @@
                   <div class="text-xl">✨</div>
                   <div>
                     <div class="font-bold text-slate-900">ĐỒ MỚI</div>
-                    <div class="text-[10px] text-slate-500 leading-tight">Mua sắm mới hoàn toàn</div>
+                    <div class="text-[10px] text-slate-500 leading-tight">Mua mới</div>
                   </div>
                 </div>
 
@@ -472,47 +482,44 @@
 
           </div>
 
-          <!-- Form Fields Row 1 -->
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            
-            <!-- Mã đạo cụ (Tự tạo) -->
-            <div class="sm:col-span-3">
-              <label class="block font-semibold text-slate-700 mb-1">Mã đạo cụ</label>
-              <input type="text" id="tab2-code" readonly placeholder="Tự tạo A0001..." class="w-full p-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-semibold cursor-not-allowed">
-            </div>
+          <!-- Hidden Mã số (Tự tạo trong hệ thống) -->
+          <div class="hidden">
+            <input type="text" id="tab2-code" readonly placeholder="Tự tạo A0001...">
+          </div>
 
+          <!-- Form Fields Row 1: Tên đạo cụ + Đơn vị dồn 1 hàng -->
+          <div class="grid grid-cols-3 gap-2 sm:gap-3">
             <!-- Tên đạo cụ (With Live Autocomplete Dropdown) -->
-            <div class="sm:col-span-5 relative">
+            <div class="col-span-2 relative">
               <label class="block font-semibold text-slate-700 mb-1">Tên đạo cụ <span class="text-rose-500">*</span></label>
-              <input type="text" id="tab2-name" required autocomplete="off" oninput="handleTab2NameInput(this.value)" placeholder="Gõ tên để tìm hoặc nhập mới..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none">
+              <input type="text" id="tab2-name" required autocomplete="off" oninput="handleTab2NameInput(this.value)" placeholder="Gõ tên để tìm hoặc nhập mới..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none text-xs">
               <!-- Live Floating Suggestions -->
               <div id="tab2-name-suggestions" class="autocomplete-suggestions hidden"></div>
             </div>
 
             <!-- Đơn vị -->
-            <div class="sm:col-span-2">
+            <div class="col-span-1">
               <label class="block font-semibold text-slate-700 mb-1">Đơn vị <span class="text-rose-500">*</span></label>
-              <input type="text" id="tab2-unit" required placeholder="cái, bộ..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+              <input type="text" id="tab2-unit" required placeholder="cái, bộ..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none text-xs">
             </div>
-
-            <!-- Số lượng -->
-            <div class="sm:col-span-2">
-              <label class="block font-semibold text-slate-700 mb-1">Số lượng <span class="text-rose-500">*</span></label>
-              <input type="number" id="tab2-qty" min="1" value="1" required oninput="updateTab2ShelfValidation()" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-center font-bold text-sky-900 focus:ring-1 focus:ring-sky-500 focus:outline-none">
-            </div>
-
           </div>
 
-          <!-- Form Fields Row 2 -->
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div class="sm:col-span-8">
-              <label class="block font-semibold text-slate-700 mb-1">Thông số kỹ thuật / Ghi chú</label>
-              <input type="text" id="tab2-specs" placeholder="Quy cách, kích thước, màu sắc..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+          <!-- Form Fields Row 2: Số lượng + Định mức tồn tối thiểu dồn 1 hàng -->
+          <div class="grid grid-cols-2 gap-2 sm:gap-3">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Số lượng <span class="text-rose-500">*</span></label>
+              <input type="number" id="tab2-qty" min="1" value="1" required oninput="updateTab2ShelfValidation()" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-center font-bold text-sky-900 focus:ring-1 focus:ring-sky-500 focus:outline-none text-xs">
             </div>
-            <div class="sm:col-span-4">
-              <label class="block font-semibold text-slate-700 mb-1">Định mức tồn tối thiểu (Tiêu hao)</label>
-              <input type="number" id="tab2-minstock" min="0" value="0" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Định mức tồn tối thiểu</label>
+              <input type="number" id="tab2-minstock" min="0" value="0" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-center focus:ring-1 focus:ring-sky-500 focus:outline-none text-xs">
             </div>
+          </div>
+
+          <!-- Form Fields Row 3: Chỉ thông số kỹ thuật mới cần 1 hàng riêng -->
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Thông số kỹ thuật / Ghi chú</label>
+            <input type="text" id="tab2-specs" placeholder="Quy cách, kích thước, màu sắc..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none text-xs">
           </div>
 
           <!-- BOX: Vị Trí Lưu Kho (1 kho cho mỗi lần lưu) - Yellow container Image 1 -->
@@ -538,12 +545,22 @@
               </div>
             </div>
 
-            <!-- Kho lưu trữ Dropdown -->
-            <div class="max-w-md">
-              <label class="block font-semibold text-slate-700 mb-1">Kho lưu trữ <span class="text-rose-500">*</span></label>
-              <select id="tab2-warehouse" required class="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-amber-500 focus:outline-none">
-                <!-- dynamic warehouse options -->
-              </select>
+            <!-- Kho lưu trữ Dropdown & Tra Bản Đồ Kho Button -->
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2 max-w-xl">
+              <div class="flex-1">
+                <label class="block font-semibold text-slate-700 mb-1">Kho lưu trữ <span class="text-rose-500">*</span></label>
+                <select id="tab2-warehouse" required class="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                  <!-- dynamic warehouse options -->
+                </select>
+              </div>
+              <button type="button" onclick="openWarehouseMap(document.getElementById('tab2-warehouse')?.value)" class="px-3 py-2 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 font-bold text-xs flex items-center justify-center gap-1.5 transition shrink-0 shadow-2xs" title="Tra cứu sơ đồ vị trí giá kệ trong kho này">
+                <svg class="w-4 h-4 text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                  <line x1="9" y1="3" x2="9" y2="18"/>
+                  <line x1="15" y1="6" x2="15" y2="21"/>
+                </svg>
+                <span>🗺️ Tra Bản Đồ Kho</span>
+              </button>
             </div>
 
             <!-- Shelf Rows Container -->
@@ -569,34 +586,41 @@
             </div>
           </div>
 
-          <!-- Purchase Details Row -->
-          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
-            <div>
-              <label class="block font-semibold text-slate-700 mb-1">Thời gian mua</label>
-              <input type="date" id="tab2-purchase-date" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none">
-            </div>
-            <div>
-              <label class="block font-semibold text-slate-700 mb-1">Đơn vị cung cấp</label>
-              <input type="text" id="tab2-supplier" placeholder="Tên đối tác..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none">
-            </div>
-            <div>
-              <label class="block font-semibold text-slate-700 mb-1">Đơn giá mua (VNĐ)</label>
-              <input type="text" id="tab2-invoice-cost" oninput="formatCurrencyInput(this)" placeholder="0" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none text-right font-medium">
-            </div>
-            <div>
-              <label class="block font-semibold text-slate-700 mb-1">Hóa đơn mua hàng (Gửi file / Chụp)</label>
-              <div class="flex items-center gap-1.5">
-                <button type="button" onclick="triggerCameraCapture('tab2-invoice-preview')" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md font-semibold text-slate-700 flex items-center justify-center gap-1">
-                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
-                  <span>Chụp</span>
-                </button>
-                <label class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md font-semibold text-slate-700 flex items-center justify-center gap-1 cursor-pointer">
-                  <i data-lucide="file-up" class="w-3.5 h-3.5"></i>
-                  <span>Gửi file</span>
-                  <input type="file" accept="image/*,.pdf" class="hidden" onchange="handleSingleFileUpload(event, 'tab2-invoice-preview')">
-                </label>
+          <!-- Purchase Details Row: Đơn vị cung cấp & Đơn giá mua thu về 1 hàng -->
+          <div class="space-y-2.5 pt-2">
+            <!-- Row: Đơn vị cung cấp & Đơn giá mua trong 1 hàng -->
+            <div class="grid grid-cols-2 gap-2 sm:gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Đơn vị cung cấp</label>
+                <input type="text" id="tab2-supplier" placeholder="Tên đối tác..." class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none text-xs">
               </div>
-              <div id="tab2-invoice-preview" class="mt-1 text-[11px] text-slate-500 italic">Chưa có file</div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Đơn giá mua (VNĐ)</label>
+                <input type="text" id="tab2-invoice-cost" oninput="formatCurrencyInput(this)" placeholder="0" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none text-right font-medium text-xs">
+              </div>
+            </div>
+
+            <!-- Row: Thời gian mua & Hóa đơn mua hàng -->
+            <div class="grid grid-cols-2 gap-2 sm:gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Thời gian mua</label>
+                <input type="date" id="tab2-purchase-date" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:outline-none text-xs">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Hóa đơn mua (Chụp / File)</label>
+                <div class="flex items-center gap-1">
+                  <button type="button" onclick="triggerCameraCapture('tab2-invoice-preview')" class="flex-1 py-1.5 px-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md font-semibold text-slate-700 flex items-center justify-center gap-1 text-[11px]">
+                    <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                    <span>Chụp</span>
+                  </button>
+                  <label class="flex-1 py-1.5 px-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md font-semibold text-slate-700 flex items-center justify-center gap-1 cursor-pointer text-[11px]">
+                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i>
+                    <span>File</span>
+                    <input type="file" accept="image/*,.pdf" class="hidden" onchange="handleSingleFileUpload(event, 'tab2-invoice-preview')">
+                  </label>
+                </div>
+                <div id="tab2-invoice-preview" class="mt-0.5 text-[10px] text-slate-500 italic truncate">Chưa có file</div>
+              </div>
             </div>
           </div>
 
@@ -648,7 +672,7 @@
       <!-- Preparation Staging Slips Banner (Thông báo phiếu chuẩn bị gom đồ ra vị trí chuẩn bị) -->
       <div id="tab3-prep-slips-banner" class="space-y-2"></div>
 
-      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      <div class="bg-white p-2.5 sm:p-5 rounded-2xl border-0 shadow-none sm:shadow-sm space-y-4">
         
         <!-- Project Info Bar (Image 3 Style) -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
@@ -674,7 +698,12 @@
 
           <!-- Kho xuất hàng * -->
           <div>
-            <label class="block font-semibold text-slate-700 mb-1">Kho xuất hàng <span class="text-rose-500">*</span></label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-slate-700">Kho xuất hàng <span class="text-rose-500">*</span></label>
+              <button type="button" onclick="openWarehouseMap(document.getElementById('tab3-warehouse')?.value)" class="text-[11px] font-bold text-sky-700 hover:text-sky-900 flex items-center gap-1 transition" title="Tra cứu sơ đồ vị trí giá kệ kho xuất">
+                <span>🗺️ Tra Bản Đồ Kho</span>
+              </button>
+            </div>
             <select id="tab3-warehouse" onchange="handleTab3WarehouseChanged()" class="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none font-semibold text-sky-900">
               <!-- dynamic warehouse options -->
             </select>
@@ -682,46 +711,46 @@
 
         </div>
 
-        <!-- Add Combo Helper & Action Toolbar (Image 2 & 3) -->
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-amber-50/40 rounded-xl border border-amber-200/70 text-xs">
+        <!-- Add Combo Helper & Action Toolbar (Gọn gàng, không tràn viền) -->
+        <div class="p-2.5 sm:p-3 bg-amber-50/50 rounded-xl border border-amber-200/70 text-xs space-y-2 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
           
           <!-- Left: Add Game Combo with quantity -->
-          <div class="flex items-center gap-2 flex-1 max-w-xl">
-            <select id="tab3-combo-select" class="flex-1 p-2 bg-white border border-slate-300 rounded-lg focus:outline-none">
-              <option value="">-- Chọn Bộ Game --</option>
+          <div class="flex items-center gap-1.5 flex-1 w-full max-w-xl">
+            <select id="tab3-combo-select" class="flex-1 min-w-0 p-2 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-amber-500">
+              <option value="">-- Chọn Bộ Game / Dụng Cụ --</option>
               <!-- dynamic combo options -->
             </select>
-            <input type="number" id="tab3-combo-qty" min="1" value="1" class="w-16 p-2 bg-white border border-slate-300 rounded-lg text-center font-bold" title="Số lượng bộ game">
-            <button type="button" onclick="addTab3GameCombo()" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
-              <span>🎲 + Game</span>
+            <input type="number" id="tab3-combo-qty" min="1" value="1" class="w-12 sm:w-14 p-2 bg-white border border-slate-300 rounded-lg text-center font-bold text-xs shrink-0" title="Số lượng bộ">
+            <button type="button" onclick="addTab3GameCombo()" class="px-2.5 sm:px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1 shadow-xs shrink-0 whitespace-nowrap text-xs">
+              <span>🎲 + Bộ</span>
             </button>
           </div>
 
           <!-- Right: Excel Import, Template Download, Reset Form -->
-          <div class="flex items-center gap-2 justify-end">
-            <label class="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold flex items-center gap-1 cursor-pointer shadow-xs whitespace-nowrap">
-              <i data-lucide="upload" class="w-4 h-4"></i>
+          <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap justify-end w-full sm:w-auto pt-1 sm:pt-0">
+            <label class="flex-1 sm:flex-none px-2.5 py-1.5 sm:py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap text-xs">
+              <i data-lucide="upload" class="w-3.5 h-3.5"></i>
               <span>Nhập Excel</span>
               <input type="file" id="tab3-import-excel" accept=".xlsx, .xls" class="hidden" onchange="importTab3Excel(event)">
             </label>
 
             <!-- Tải Mẫu Excel button -->
-            <button type="button" onclick="downloadTab3SampleExcel()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold flex items-center gap-1 shadow-xs whitespace-nowrap" title="Tải file mẫu Excel xuất kho">
-              <i data-lucide="download" class="w-4 h-4 text-sky-600"></i>
+            <button type="button" onclick="downloadTab3SampleExcel()" class="flex-1 sm:flex-none px-2.5 py-1.5 sm:py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold flex items-center justify-center gap-1 shadow-xs whitespace-nowrap text-xs" title="Tải file mẫu Excel xuất kho">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-sky-600"></i>
               <span>Tải Mẫu</span>
             </button>
 
             <!-- Nhập Lại button -->
-            <button type="button" onclick="resetTab3Form()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-1 shadow-xs whitespace-nowrap" title="Xóa trắng danh sách xuất">
-              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            <button type="button" onclick="resetTab3Form()" class="px-2.5 py-1.5 sm:py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold flex items-center justify-center gap-1 shadow-xs whitespace-nowrap text-xs" title="Xóa trắng danh sách xuất">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
               <span>Nhập lại</span>
             </button>
           </div>
 
         </div>
 
-        <!-- Checklist Table with Direct Inline Rows (Image 3) -->
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <!-- Checklist Table (Desktop view: table) -->
+        <div class="hidden md:block overflow-x-auto border border-slate-200 rounded-xl">
           <table class="w-full text-left text-xs border-collapse">
             <thead>
               <tr class="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase text-[11px]">
@@ -738,6 +767,11 @@
               <!-- Rendered dynamically with Combos and Direct Inline Rows -->
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile View: Dạng thẻ cho từng loại đồ (gọn trong 1 màn hình, không cần vuốt sang, chỉ cần vuốt xuống) -->
+        <div id="tab3-mobile-cards" class="md:hidden space-y-2.5">
+          <!-- Rendered dynamically via JavaScript -->
         </div>
 
         <!-- Action Confirmation Footer (Image 3) -->
@@ -783,7 +817,7 @@
     <!-- ========================================================================= -->
     <section id="tab-panel-4" class="tab-panel hidden space-y-4">
       
-      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      <div class="bg-white p-2.5 sm:p-5 rounded-2xl border-0 shadow-none sm:shadow-sm space-y-4">
         
         <!-- Header & Program Selector (Filters programs holding props) -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
@@ -815,33 +849,45 @@
 
         <!-- BẢNG 1: CHECKLIST HOÀN TRẢ ĐỒ LÀNH -->
         <div class="space-y-2">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between flex-wrap gap-2">
             <div class="flex items-center gap-2">
               <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">1</span>
               <h3 class="text-xs sm:text-sm font-bold text-slate-800">Bảng 1: Kiểm Kê Đạo Cụ Còn Tốt Hoàn Trả</h3>
             </div>
-            <button type="button" onclick="setAllTab4ToPostCheckShelf()" class="text-xs font-semibold px-2.5 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition" title="Lưu toàn bộ đồ vào vị trí chờ kiểm tra">
-              Lưu tại vị trí Hậu kiểm
-            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="openWarehouseMap()" class="text-xs font-semibold px-2.5 py-1 rounded bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition flex items-center gap-1 shadow-2xs" title="Tra cứu sơ đồ kho & vị trí các giá kệ">
+                <span>🗺️ Tra Bản Đồ Kho</span>
+              </button>
+              <button type="button" onclick="setAllTab4ToPostCheckShelf()" class="text-xs font-semibold px-2.5 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition" title="Lưu toàn bộ đồ vào vị trí chờ kiểm tra">
+                Lưu tại vị trí Hậu kiểm
+              </button>
+            </div>
           </div>
 
-          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+          <!-- Desktop Table View -->
+          <div class="hidden md:block overflow-x-auto border border-slate-200 rounded-xl">
             <table class="w-full text-left text-xs border-collapse">
               <thead>
                 <tr class="bg-slate-50 border-b border-slate-200 font-semibold text-slate-600 uppercase text-[10px]">
                   <th class="py-2.5 px-3">Tên Đạo Cụ</th>
                   <th class="py-2.5 px-2 text-center w-16">ĐVT</th>
-                  <th class="py-2.5 px-2 text-center w-24">Đã Mang Đi</th>
-                  <th class="py-2.5 px-2 text-center w-28 bg-emerald-50/50 text-emerald-700">SL Còn Tốt</th>
-                  <th class="py-2.5 px-2 text-center w-24">Chênh Lệch</th>
-                  <th class="py-2.5 px-3 w-40">Giá / Kệ Cất</th>
-                  <th class="py-2.5 px-2 text-center w-28">Số Tầng</th>
+                  <th class="py-2.5 px-2 text-center w-20">Mang Đi</th>
+                  <th class="py-2.5 px-2 text-center w-24 bg-emerald-50/50 text-emerald-700">SL Còn Tốt</th>
+                  <th class="py-2.5 px-2 text-center w-20">Trạng Thái</th>
+                  <th class="py-2.5 px-3">Vị Trí Lưu Kho (Giá Kệ / Tầng) & Phân Bổ</th>
                 </tr>
               </thead>
               <tbody id="tab4-return-table-body" class="divide-y divide-slate-100">
-                <tr><td colspan="7" class="p-4 text-center text-slate-400">Vui lòng chọn Chương trình phía trên để tải danh sách đạo cụ</td></tr>
+                <tr><td colspan="6" class="p-4 text-center text-slate-400">Vui lòng chọn Chương trình phía trên để tải danh sách đạo cụ</td></tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Mobile Card View: Dạng thẻ từng đồ theo bộ game, có thêm giá kệ, không cuộn ngang -->
+          <div id="tab4-mobile-cards" class="md:hidden space-y-2.5">
+            <div class="p-4 text-center text-slate-400 bg-white rounded-xl border border-slate-200 text-xs">
+              Vui lòng chọn Chương trình phía trên để tải danh sách đạo cụ
+            </div>
           </div>
         </div>
 
@@ -1186,9 +1232,15 @@
           <span id="detail-code-badge" class="px-2 py-0.5 rounded text-xs font-bold bg-sky-100 text-sky-800">A-001</span>
           <h2 id="detail-name" class="text-base sm:text-lg font-bold text-slate-900 mt-1">Tên Đạo Cụ</h2>
         </div>
-        <button onclick="closeModal('modal-item-detail')" class="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
+        <div class="flex items-center gap-2">
+          <button id="btn-top-edit-item" type="button" onclick="handleDetailTopEditClick()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+            <span id="btn-top-edit-item-text">Sửa Thông Tin</span>
+          </button>
+          <button onclick="closeModal('modal-item-detail')" class="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
       </div>
 
       <div id="detail-content" class="space-y-4 text-xs">
@@ -1211,14 +1263,113 @@
         <!-- dynamic warehouse cards -->
       </div>
 
-      <!-- Add Warehouse Form -->
+      <!-- Add Warehouse Form (Yêu cầu bắt buộc đủ thông tin, quản lý kho chọn từ tài khoản) -->
       <form id="form-add-warehouse" onsubmit="handleAddWarehouse(event)" class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
-        <div class="font-bold text-slate-800">+ Thêm Kho Mới</div>
-        <input type="text" id="new-wh-name" required placeholder="Tên kho (Ví dụ: Kho Đông Anh)..." class="w-full p-2 bg-white border border-slate-200 rounded-md">
-        <input type="text" id="new-wh-address" placeholder="Địa chỉ chi tiết..." class="w-full p-2 bg-white border border-slate-200 rounded-md">
-        <input type="text" id="new-wh-manager" placeholder="Người quản lý kho..." class="w-full p-2 bg-white border border-slate-200 rounded-md">
-        <button type="submit" class="w-full py-2 bg-sky-600 text-white font-bold rounded-md hover:bg-sky-700 transition">Thêm Kho</button>
+        <div class="font-bold text-slate-800 text-xs sm:text-sm">+ Thêm Kho Mới (Bắt buộc nhập đủ thông tin)</div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Tên kho: *</label>
+          <input type="text" id="new-wh-name" required placeholder="Tên kho (Ví dụ: Kho Đông Anh)..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Địa chỉ chi tiết: *</label>
+          <input type="text" id="new-wh-address" required placeholder="Địa chỉ chi tiết của kho..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Người quản lý kho: * (Chọn từ danh sách tài khoản)</label>
+          <select id="new-wh-manager" required class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800">
+            <option value="">-- Chọn người quản lý từ danh sách tài khoản --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Ảnh sơ đồ / Bản đồ kho (Tùy chọn):</label>
+          <div class="flex items-center gap-1.5">
+            <label class="flex-1 flex items-center justify-center gap-1 p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium cursor-pointer hover:bg-slate-50 text-slate-700">
+              <i data-lucide="upload" class="w-3.5 h-3.5 text-slate-500"></i>
+              <span>Tải file ảnh</span>
+              <input type="file" id="new-wh-map-file" accept="image/*" class="hidden" onchange="handleNewWhMapUpload(event)">
+            </label>
+            <button type="button" onclick="openLiveCamera(handleNewWhMapCamera)" class="px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs hover:bg-slate-50 flex items-center gap-1 font-medium text-slate-700">
+              <i data-lucide="camera" class="w-3.5 h-3.5 text-sky-600"></i>
+              <span>Chụp</span>
+            </button>
+          </div>
+          <input type="hidden" id="new-wh-map-data" value="">
+          <div id="new-wh-map-preview" class="hidden mt-1.5 relative w-full h-24 rounded-lg border border-slate-300 overflow-hidden bg-slate-900 flex items-center justify-center">
+            <img src="" class="max-w-full max-h-full object-contain">
+            <button type="button" onclick="clearNewWhMapPhoto()" class="absolute top-1 right-1 bg-rose-600 text-white p-1 rounded-full text-xs hover:bg-rose-700 shadow-xs" title="Xóa ảnh sơ đồ">
+              <i data-lucide="x" class="w-3 h-3"></i>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition shadow-xs text-xs sm:text-sm mt-1">
+          + Thêm Kho
+        </button>
       </form>
+    </div>
+  </div>
+
+  <!-- 2.1. MODAL: SỬA KHO ĐANG VẬN HÀNH (Sửa địa chỉ & người quản lý kho) -->
+  <div id="modal-edit-warehouse" class="fixed inset-0 z-55 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-edit-warehouse')"></div>
+    <div class="bg-white rounded-2xl max-w-md w-full z-10 shadow-2xl modal-content p-4 sm:p-5 space-y-3.5 text-xs">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">Sửa Kho Đang Vận Hành</h3>
+            <p class="text-[11px] text-slate-500">Cập nhật địa chỉ và người quản lý kho</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-edit-warehouse')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <input type="hidden" id="edit-wh-id" value="">
+      
+      <div class="space-y-1">
+        <label class="block font-bold text-slate-700">Tên kho (Cố định):</label>
+        <input type="text" id="edit-wh-name" disabled class="w-full p-2 bg-slate-100 border border-slate-200 rounded-lg font-semibold text-slate-600 cursor-not-allowed">
+      </div>
+
+      <div class="space-y-1">
+        <label class="block font-bold text-slate-700">Địa chỉ kho: *</label>
+        <input type="text" id="edit-wh-address" required placeholder="Địa chỉ chi tiết..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:ring-1 focus:ring-sky-500">
+      </div>
+
+      <div class="space-y-1">
+        <label class="block font-bold text-slate-700">Người quản lý kho: *</label>
+        <select id="edit-wh-manager" required class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-sky-500">
+          <!-- Populated from state.users -->
+        </select>
+      </div>
+
+      <div class="space-y-1">
+        <label class="block font-bold text-slate-700">Ảnh sơ đồ / Bản đồ kho:</label>
+        <div class="flex items-center gap-1.5">
+          <label class="flex-1 flex items-center justify-center gap-1 p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium cursor-pointer hover:bg-slate-50 text-slate-700">
+            <i data-lucide="upload" class="w-3.5 h-3.5 text-slate-500"></i>
+            <span>Đổi ảnh sơ đồ</span>
+            <input type="file" id="edit-wh-map-file" accept="image/*" class="hidden" onchange="handleEditWhMapUpload(event)">
+          </label>
+          <button type="button" onclick="openLiveCamera(handleEditWhMapCamera)" class="px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs hover:bg-slate-50 flex items-center gap-1 font-medium text-slate-700">
+            <i data-lucide="camera" class="w-3.5 h-3.5 text-sky-600"></i>
+            <span>Chụp</span>
+          </button>
+        </div>
+        <input type="hidden" id="edit-wh-map-data" value="">
+        <div id="edit-wh-map-preview" class="hidden mt-1.5 relative w-full h-28 rounded-lg border border-slate-300 overflow-hidden bg-slate-900 flex items-center justify-center">
+          <img src="" class="max-w-full max-h-full object-contain">
+          <button type="button" onclick="clearEditWhMapPhoto()" class="absolute top-1 right-1 bg-rose-600 text-white p-1 rounded-full text-xs hover:bg-rose-700 shadow-xs" title="Xóa ảnh sơ đồ (Dùng lại sơ đồ SVG)">
+            <i data-lucide="x" class="w-3 h-3"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+        <button type="button" onclick="closeModal('modal-edit-warehouse')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold">Hủy</button>
+        <button type="button" onclick="saveEditedWarehouse()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-bold shadow-xs">💾 Lưu Cập Nhật</button>
+      </div>
     </div>
   </div>
 
@@ -1281,23 +1432,10 @@
             </div>
           </div>
 
-          <!-- Name & Category -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div class="sm:col-span-2 space-y-1">
-              <label class="block font-semibold text-slate-700 text-[11px]" id="label-combo-name">Tên bộ game *</label>
-              <input type="text" id="new-combo-name" required placeholder="Ví dụ: Bộ Bánh Xe Khổng Lồ..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none">
-            </div>
-            <div class="space-y-1">
-              <label class="block font-semibold text-slate-700 text-[11px]">Chuyên mục</label>
-              <input type="text" id="new-combo-category" placeholder="Đồ hơi, Phụ trợ..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none" list="datalist-combo-categories">
-              <datalist id="datalist-combo-categories">
-                <option value="Đồ hơi">
-                <option value="Game tự chế">
-                <option value="Dụng cụ phụ trợ">
-                <option value="Âm thanh & Kỹ thuật">
-                <option value="Phân luồng & An toàn">
-              </datalist>
-            </div>
+          <!-- Name (Bỏ trường chuyên mục theo yêu cầu) -->
+          <div class="space-y-1">
+            <label class="block font-semibold text-slate-700 text-[11px]" id="label-combo-name">Tên bộ game *</label>
+            <input type="text" id="new-combo-name" required placeholder="Ví dụ: Bộ Bánh Xe Khổng Lồ..." class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none font-semibold">
           </div>
 
           <!-- Description -->
@@ -1311,7 +1449,6 @@
             <div class="flex flex-wrap items-center justify-between gap-1.5">
               <div class="font-semibold text-slate-700 text-[11px] flex items-center gap-1.5">
                 <span>Đạo cụ thành phần trong bộ:</span>
-                <span class="text-[10px] text-amber-600 font-normal hidden sm:inline">(⚡ Tự động thêm máy bơm + dây điện khi có đồ hơi)</span>
               </div>
               <div class="flex items-center gap-1.5">
                 <button type="button" onclick="autoAddInflatableToolset()" class="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10.5px] font-bold border border-amber-300 transition" title="Tự động thêm Máy thổi khí 1500W và Cuộn dây điện 20m">
@@ -1421,7 +1558,10 @@
   <!-- 5. ADMIN PASSWORD AUTH MODAL (Protected Lock/Switch) -->
   <div id="modal-admin-lock" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
     <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-admin-lock')"></div>
-    <div class="bg-white rounded-2xl max-w-sm w-full z-10 shadow-xl modal-content p-5 space-y-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full z-10 shadow-xl modal-content p-5 space-y-4 relative">
+      <button type="button" onclick="closeModal('modal-admin-lock')" class="absolute top-3.5 right-3.5 text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
       <div class="text-center space-y-1">
         <div class="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
           <i data-lucide="shield-check" class="w-6 h-6 text-sky-600"></i>
@@ -1431,7 +1571,7 @@
       </div>
 
       <div class="space-y-3">
-        <input type="password" id="admin-pass-input" placeholder="Mật khẩu Admin (mặc định: admin123)..." class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500">
+        <input type="password" id="admin-pass-input" placeholder="Mật khẩu Admin (mặc định: admin123)..." onkeydown="if(event.key==='Enter') verifyAdminPassword()" class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500">
         <button type="button" onclick="verifyAdminPassword()" class="w-full py-2.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition">
           Xác Nhận & Thoát Tài Khoản
         </button>
@@ -1439,62 +1579,160 @@
     </div>
   </div>
 
-  <!-- 6. USER LOGIN / ROLE PERMISSIONS MODAL -->
-  <div id="modal-user-login" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
-    <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm" onclick="closeModal('modal-user-login')"></div>
-    <div class="bg-white rounded-2xl max-w-md w-full z-10 shadow-2xl modal-content p-5 sm:p-6 space-y-4">
+  <!-- 6. USER PROFILE & PASSWORD CHANGE MODAL (Ấn vào ảnh để cài lại mật khẩu) -->
+  <div id="modal-user-profile" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-user-profile')"></div>
+    <div class="bg-white rounded-2xl max-w-md w-full z-10 shadow-2xl modal-content p-5 sm:p-6 space-y-4 text-xs">
       <div class="flex items-center justify-between pb-2 border-b border-slate-200">
-        <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-xl bg-sky-600 flex items-center justify-center text-white font-bold text-sm">
-            ABA
-          </div>
+        <div class="flex items-center gap-2.5">
+          <img src="logo.png" alt="Logo ABA" class="w-9 h-9 rounded-xl object-contain border border-slate-200 shadow-2xs">
           <div>
-            <h3 class="text-sm sm:text-base font-bold text-slate-900">Tài Khoản & Phân Quyền</h3>
-            <p class="text-[10px] text-slate-500">Phân quyền Thủ kho, Quản trị và Thông thường</p>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">Thông Tin Tài Khoản</h3>
+            <p class="text-[10px] text-slate-500">Cài đặt mật khẩu & hồ sơ cá nhân</p>
           </div>
         </div>
-        <button onclick="closeModal('modal-user-login')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+        <button onclick="closeModal('modal-user-profile')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
 
-      <!-- Quick Switch Account Buttons -->
-      <div class="space-y-1.5">
-        <label class="block font-bold text-[11px] text-slate-700">Chuyển nhanh tài khoản:</label>
-        <div id="quick-user-switch-list" class="grid grid-cols-2 gap-2 text-xs">
-          <!-- Rendered dynamically -->
-        </div>
-      </div>
-
-      <div class="space-y-3 text-xs pt-1 border-t border-slate-100">
-        <div>
-          <label class="block font-semibold text-slate-700 mb-1">Chọn tài khoản chỉnh sửa:</label>
-          <select id="login-phone-select" onchange="handleLoginSelectChange(this.value)" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium focus:ring-1 focus:ring-sky-500">
-            <!-- dynamic pre-authorized users -->
-          </select>
-        </div>
-
-        <div>
-          <label class="block font-bold text-slate-700 mb-1">Giao vai trò / Phân quyền:</label>
-          <select id="login-role-select" onchange="handleUserRoleChange(this.value)" class="w-full p-2 bg-amber-50/60 border border-amber-300 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-amber-500">
-            <option value="KEEPER">⭐ Thủ kho (Nhận & duyệt tất cả thao tác kho)</option>
-            <option value="ADMIN">👑 Quản trị hệ thống (Toàn quyền quản lý & cấu hình)</option>
-            <option value="STAFF">👤 Tài khoản thông thường (Nhân sự / Điều hành hiện trường)</option>
-          </select>
-        </div>
-
-        <div id="face-id-section" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-center">
-          <div class="text-[11px] font-semibold text-slate-700">Ảnh nhận diện / Chữ ký nhân sự:</div>
-          <div class="w-16 h-16 mx-auto rounded-full overflow-hidden border-2 border-sky-400 bg-slate-200 shadow-xs">
-            <img id="login-face-preview" src="" alt="Face" class="w-full h-full object-cover">
+      <!-- Current User Profile Info -->
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-3">
+        <img id="profile-modal-avatar" src="" alt="Avatar" class="w-14 h-14 rounded-full object-cover border-2 border-sky-400 shadow-xs shrink-0">
+        <div class="min-w-0 flex-1">
+          <div id="profile-modal-name" class="font-bold text-sm text-slate-900 truncate">Nguyễn Văn An</div>
+          <div id="profile-modal-phone" class="text-slate-500 text-[11px]">0912345678</div>
+          <div class="mt-1 flex items-center gap-1.5">
+            <span id="profile-modal-role" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Thủ kho</span>
           </div>
-          <button type="button" onclick="openLiveCameraForUserAvatar()" class="text-xs font-semibold px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-sky-700 hover:bg-sky-50 transition">
-            <i data-lucide="camera" class="w-3.5 h-3.5 inline mr-1"></i>
-            Chụp Lại Ảnh
-          </button>
         </div>
+      </div>
 
-        <button type="button" onclick="confirmLogin()" class="w-full py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition shadow-md shadow-sky-600/20">
-          Lưu Phân Quyền & Vào Phiên Làm Việc
+      <!-- Change Password Form -->
+      <form id="form-change-password" onsubmit="handleChangePassword(event)" class="p-3.5 bg-sky-50/50 rounded-xl border border-sky-200 space-y-2.5">
+        <div class="font-bold text-sky-950 flex items-center gap-1.5 text-xs">
+          <i data-lucide="key" class="w-4 h-4 text-sky-600"></i>
+          <span>Cài Đặt Lại Mật Khẩu</span>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">Mật khẩu cũ: *</label>
+          <input type="password" id="profile-old-pass" required placeholder="Nhập mật khẩu hiện tại..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">Mật khẩu mới: *</label>
+          <input type="password" id="profile-new-pass" required minlength="4" placeholder="Nhập mật khẩu mới..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">Xác nhận mật khẩu mới: *</label>
+          <input type="password" id="profile-confirm-pass" required minlength="4" placeholder="Nhập lại mật khẩu mới..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium">
+        </div>
+        <button type="submit" class="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-lg transition shadow-xs">
+          💾 Lưu Mật Khẩu Mới
         </button>
+      </form>
+
+      <!-- Admin Panel Button (Visible for Admin only) -->
+      <div id="admin-mgmt-shortcut-section" class="hidden">
+        <button type="button" onclick="openAdminUserMgmtModal()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5">
+          <i data-lucide="shield" class="w-4 h-4"></i>
+          <span>👑 Mở Bảng Quản Trị & Phân Quyền (Tạo tài khoản & Xem MK)</span>
+        </button>
+      </div>
+
+      <!-- Logout Button (Requires Admin Password) -->
+      <div class="pt-2 border-t border-slate-200">
+        <button type="button" onclick="requestLogout()" class="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition flex items-center justify-center gap-1.5">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          <span>🚪 Đăng Xuất Khỏi Hệ Thống (Cần MK Quản trị)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6.1. ADMIN USER MANAGEMENT & PASSWORDS MODAL (Chỉ dành cho Quản trị viên) -->
+  <div id="modal-admin-user-mgmt" class="fixed inset-0 z-55 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+    <div class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs" onclick="closeModal('modal-admin-user-mgmt')"></div>
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col z-10 shadow-2xl modal-content overflow-hidden border border-slate-200 text-xs">
+      
+      <!-- Header with Logo.png -->
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-amber-50/60">
+        <div class="flex items-center gap-2.5">
+          <img src="logo.png" alt="Logo ABA" class="w-9 h-9 rounded-xl object-contain border border-slate-200 shadow-2xs">
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5">
+              <span>Quản Trị Người Dùng & Phân Quyền</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-900">Admin Only</span>
+            </h3>
+            <p class="text-[11px] text-slate-500">Tạo tài khoản mới, phân quyền và tra cứu mật khẩu đang dùng</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-admin-user-mgmt')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        
+        <!-- Form Tạo Tài Khoản Mới (Chỉ cần 2 thông tin: Họ tên & SĐT) -->
+        <form id="form-create-new-user" onsubmit="handleAdminCreateUser(event)" class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+          <div class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+            <i data-lucide="user-plus" class="w-4 h-4 text-emerald-600"></i>
+            <span>+ Tạo Tài Khoản Nhân Sự Mới</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">1. Họ và tên: *</label>
+              <input type="text" id="new-user-fullname" required placeholder="Ví dụ: Nguyễn Văn Hùng..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">2. Số điện thoại: * (Làm MK mặc định)</label>
+              <input type="tel" id="new-user-phone" required placeholder="Ví dụ: 0912345678..." class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">Phân quyền vai trò:</label>
+              <select id="new-user-role" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800">
+                <option value="STAFF">👤 Tài khoản thông thường</option>
+                <option value="KEEPER">⭐ Thủ kho</option>
+                <option value="ADMIN">👑 Quản trị hệ thống</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[10px] text-slate-500 italic">* Mật khẩu đăng nhập mặc định ban đầu là Số điện thoại. Lần đầu đăng nhập bắt buộc dùng điện thoại để chụp ảnh khuôn mặt.</span>
+            <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition shadow-xs shrink-0 flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Tạo Tài Khoản</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Danh Sách Tài Khoản & Mật Khẩu Đang Sử Dụng -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+              <i data-lucide="users" class="w-4 h-4 text-sky-600"></i>
+              <span>Danh Sách Tài Khoản & Mật Khẩu Đang Sử Dụng:</span>
+            </span>
+            <span id="admin-users-count" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800">4 tài khoản</span>
+          </div>
+
+          <div class="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                <tr>
+                  <th class="py-2.5 px-3 w-12 text-center">Ảnh</th>
+                  <th class="py-2.5 px-3">Họ và Tên</th>
+                  <th class="py-2.5 px-2">Số Điện Thoại</th>
+                  <th class="py-2.5 px-3">Phân Quyền Vai Trò</th>
+                  <th class="py-2.5 px-3 bg-amber-50/60 text-amber-900 font-black">Mật Khẩu Đang Dùng</th>
+                  <th class="py-2.5 px-2 text-center w-12">Xóa</th>
+                </tr>
+              </thead>
+              <tbody id="admin-user-list-tbody" class="divide-y divide-slate-100 bg-white">
+                <!-- dynamic rows with passwords -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -1518,16 +1756,10 @@
           <div class="flex items-center justify-between font-semibold text-slate-800">
             <span>1. Ảnh tập hợp đội ngũ phụ trách xuất đồ:</span>
           </div>
-          <div class="flex items-center gap-2">
-            <button type="button" onclick="triggerCameraCapture('tab3-photo-team-preview-modal')" class="flex-1 py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5 shadow-2xs">
-              <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
-              <span>📸 Chụp Máy Ảnh</span>
-            </button>
-            <button type="button" onclick="triggerFileUpload('tab3-photo-team-preview-modal')" class="py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold flex items-center justify-center gap-1.5 shadow-2xs">
-              <i data-lucide="upload" class="w-4 h-4 text-slate-600"></i>
-              <span>📁 Gửi File</span>
-            </button>
-          </div>
+          <button type="button" onclick="triggerCameraCapture('tab3-photo-team-preview-modal')" class="w-full py-2.5 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold camera-trigger flex items-center justify-center gap-1.5 shadow-2xs">
+            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+            <span>📸 Bật Máy Ảnh Chụp Đội Ngũ</span>
+          </button>
           <div id="tab3-photo-team-preview-modal" class="hidden relative h-32 rounded-lg border border-slate-200 overflow-hidden">
             <img src="" alt="Team photo" class="w-full h-full object-cover">
           </div>
@@ -1536,18 +1768,12 @@
         <!-- Photo 2: Loaded Truck Photo -->
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
           <div class="flex items-center justify-between font-semibold text-slate-800">
-            <span>2. Ảnh nghiệm thu đạo cụ xếp gọn gàng trên xe tải <span class="text-rose-500 font-bold">* (Bắt buộc chụp)</span></span>
+            <span>2. Ảnh nghiệm thu đạo cụ xếp gọn gàng trên xe tải <span class="text-rose-500 font-bold">* (Bắt buộc chụp máy ảnh)</span></span>
           </div>
-          <div class="flex items-center gap-2">
-            <button type="button" onclick="triggerCameraCapture('tab3-photo-truck-preview')" class="flex-1 py-2 px-3 border border-sky-300 bg-sky-50/70 hover:bg-sky-100 text-sky-900 font-bold camera-trigger flex items-center justify-center gap-1.5 shadow-2xs">
-              <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
-              <span>📸 Chụp Máy Ảnh Xe Tải</span>
-            </button>
-            <button type="button" onclick="triggerFileUpload('tab3-photo-truck-preview')" class="py-2 px-3 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-semibold flex items-center justify-center gap-1.5 shadow-2xs">
-              <i data-lucide="upload" class="w-4 h-4 text-slate-600"></i>
-              <span>📁 Gửi File</span>
-            </button>
-          </div>
+          <button type="button" onclick="triggerCameraCapture('tab3-photo-truck-preview')" class="w-full py-2.5 px-3 border border-sky-300 bg-sky-50/70 hover:bg-sky-100 text-sky-900 font-bold camera-trigger flex items-center justify-center gap-1.5 shadow-2xs">
+            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+            <span>📸 Bật Máy Ảnh Chụp Xe Tải & Đạo Cụ</span>
+          </button>
           <div id="tab3-photo-truck-preview" class="hidden relative h-32 rounded-lg border border-slate-200 overflow-hidden">
             <img src="" alt="Truck photo" class="w-full h-full object-cover">
           </div>
@@ -1566,9 +1792,9 @@
   </div>
 
   <!-- 8. STREAMLINED FIELD-TO-FIELD TRANSFER MODAL (Tab 5) -->
-  <div id="modal-field-transfer" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
+  <div id="modal-field-transfer" class="fixed inset-0 z-50 hidden flex items-center justify-center p-2 sm:p-4 modal-overlay">
     <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeModal('modal-field-transfer')"></div>
-    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto z-10 shadow-xl modal-content p-4 sm:p-5 space-y-3.5">
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto z-10 shadow-xl modal-content p-2.5 sm:p-5 space-y-2.5">
       
       <!-- Header -->
       <div class="flex items-center justify-between pb-2 border-b border-slate-200">
@@ -1579,10 +1805,10 @@
         <button onclick="closeModal('modal-field-transfer')" class="p-1 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
 
-      <div class="space-y-3 text-xs">
+      <div class="space-y-2.5 text-xs">
         
-        <!-- Source Tour & Target Destinations Management -->
-        <div class="p-3 bg-purple-50/70 rounded-xl border border-purple-200 space-y-2">
+        <!-- Source Tour & Target Destinations Management (Gọn gàng, bỏ bớt lớp bao viền) -->
+        <div class="p-2 sm:p-3 bg-purple-50/50 rounded-xl border border-purple-200/80 space-y-2">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
             <div>
               <span class="text-slate-500 text-[11px]">Chương trình xuất chuyển:</span>
@@ -1601,14 +1827,14 @@
 
         <!-- Quick Shortcut: Chuyển toàn bộ 100% -->
         <div class="flex items-center justify-between gap-2 px-1">
-          <span class="text-[11px] text-slate-500 italic">💡 Mẹo: Bấm vào tên Bộ Game để thu gọn/mở rộng. Nhập số lượng bộ trực tiếp để phân bổ tức thì.</span>
-          <button type="button" onclick="transferAll100Percent()" class="px-3 py-1 text-xs font-bold rounded-lg bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-200 transition shrink-0">
-            ⚡ Chuyển Toàn Bộ (100%)
+          <span class="text-[11px] text-slate-500 italic truncate">💡 Mẹo: Bấm tên Bộ Game để thu gọn/mở. Chỉnh số bộ để chuyển cả bộ.</span>
+          <button type="button" onclick="transferAll100Percent()" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-200 transition shrink-0">
+            ⚡ Chuyển 100%
           </button>
         </div>
 
-        <!-- Streamlined Transfer Table -->
-        <div class="overflow-x-auto border border-slate-200 rounded-xl max-h-72">
+        <!-- Streamlined Transfer Table (Vừa khít 1 màn hình, khóa cố định tiêu đề bảng) -->
+        <div class="overflow-y-auto overflow-x-hidden sm:overflow-x-auto border border-slate-200 rounded-xl max-h-[55vh] sm:max-h-80 relative">
           <table class="w-full text-left text-xs border-collapse" id="transfer-main-table">
             <!-- dynamic items rendered with direct combo set inputs -->
           </table>
@@ -2011,6 +2237,159 @@
 
   <!-- Universal Camera / Photo Capture Input -->
   <input type="file" id="universal-camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleCameraInputChange(event)">
+
+  <!-- ==================== FULL-SCREEN LOGIN OVERLAY ==================== -->
+  <div id="login-screen" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto hidden" style="z-index: 9999;">
+    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 p-6 sm:p-8 space-y-5 text-xs modal-content">
+      
+      <!-- Logo & Brand Header -->
+      <div class="text-center space-y-2">
+        <div class="inline-flex p-2 rounded-2xl bg-slate-50 border border-slate-200 shadow-xs">
+          <img src="logo.png" alt="Logo ABA" class="w-14 h-14 object-contain">
+        </div>
+        <h2 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">HỆ THỐNG QUẢN LÝ ĐẠO CỤ & KHO BÃI</h2>
+        <p class="text-slate-500 text-xs">Đăng nhập tài khoản tác nghiệp ABA Operations</p>
+      </div>
+
+      <!-- Login Form View -->
+      <div id="login-form-view">
+        <form id="form-user-login" onsubmit="handleUserLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">1. Họ và Tên Nhân Sự: *</label>
+            <div class="relative">
+              <input type="text" id="login-input-name" required placeholder="Nhập họ và tên (Ví dụ: Nguyễn Văn An)..." class="w-full p-3 pl-9 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-sky-500 focus:bg-white transition">
+              <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-3.5"></i>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">2. Mật Khẩu: * (Mặc định: Số điện thoại)</label>
+            <div class="relative">
+              <input type="password" id="login-input-password" required placeholder="Nhập mật khẩu..." class="w-full p-3 pl-9 pr-10 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-sky-500 focus:bg-white transition">
+              <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-3.5"></i>
+              <button type="button" onclick="toggleLoginPasswordVisibility()" class="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition">
+                <i id="login-pass-icon" data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Security Policy Notice -->
+          <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
+            <div class="font-bold flex items-center gap-1.5 text-amber-950">
+              <i data-lucide="shield-alert" class="w-4 h-4 text-amber-600 shrink-0"></i>
+              <span>Quy định xác thực bảo mật:</span>
+            </div>
+            <ul class="list-disc list-inside text-[10px] text-amber-800 space-y-0.5 pl-0.5">
+              <li>Lần đầu đăng nhập <strong>bắt buộc thực hiện trên ĐIỆN THOẠI</strong> để chụp ảnh khuôn mặt nhận diện.</li>
+              <li>Mật khẩu mặc định là <strong>Số điện thoại</strong> đã được Quản trị viên cấp.</li>
+              <li>Không thể tự ý chuyển đổi hoặc thoát tài khoản trừ khi có mật khẩu Quản trị.</li>
+            </ul>
+          </div>
+
+          <button type="submit" id="btn-submit-login" class="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-black text-xs sm:text-sm rounded-xl transition shadow flex items-center justify-center gap-2">
+            <i data-lucide="log-in" class="w-4 h-4"></i>
+            <span>Đăng Nhập Vào Hệ Thống</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Face Capture View (Shown during first-time login on mobile) -->
+      <div id="login-face-capture-view" class="hidden space-y-4 text-center">
+        <div class="p-3 bg-sky-50 rounded-2xl border border-sky-200 text-sky-950">
+          <div class="font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+            <i data-lucide="camera" class="w-4 h-4 text-sky-600"></i>
+            <span>Chụp Ảnh Khuôn Mặt Lần Đầu</span>
+          </div>
+          <p class="text-[11px] text-sky-800 mt-1">Chào bạn <strong id="login-face-user-name">...</strong>! Vui lòng chụp ảnh khuôn mặt chính diện để hoàn tất đăng ký thiết bị lần đầu.</p>
+        </div>
+
+        <!-- Camera / Photo Preview Container -->
+        <div class="relative w-44 h-44 mx-auto rounded-full overflow-hidden border-4 border-sky-500 shadow-md bg-slate-900 flex items-center justify-center">
+          <img id="login-face-photo-preview" src="" alt="Face" class="w-full h-full object-cover hidden">
+          <div id="login-face-placeholder" class="text-slate-400 text-center p-3">
+            <i data-lucide="user" class="w-16 h-16 mx-auto opacity-50 mb-1"></i>
+            <span class="text-[10px] block">Chưa có ảnh khuôn mặt</span>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <button type="button" onclick="triggerLoginLiveCamera()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+            <span>Mở Camera Chụp Khuôn Mặt</span>
+          </button>
+
+          <button type="button" id="btn-finish-first-login" onclick="finishFirstTimeLogin()" disabled class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Xác Nhận & Vào Hệ Thống</span>
+          </button>
+
+          <button type="button" onclick="cancelFirstTimeLogin()" class="w-full py-1.5 text-slate-500 hover:text-slate-700 font-semibold text-xs">
+            Quay lại đăng nhập
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== WAREHOUSE MAP VIEWER (SPLIT HALF / FULLSCREEN) ==================== -->
+  <div id="warehouse-map-panel" class="hidden transition-all duration-200">
+    <!-- Map Control Top Bar -->
+    <div class="px-3 py-2 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 select-none shrink-0 shadow-sm">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-sky-400">
+          <svg class="w-4 h-4 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+            <line x1="9" y1="3" x2="9" y2="18"/>
+            <line x1="15" y1="6" x2="15" y2="21"/>
+          </svg>
+          <span class="hidden sm:inline">BẢN ĐỒ KHO:</span>
+        </div>
+        <select id="warehouse-map-select" onchange="switchWarehouseMap(this.value)" class="text-xs font-bold text-slate-900 bg-white border border-sky-300 rounded-lg py-1 px-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500">
+          <!-- Populated from state.warehouses -->
+        </select>
+        <span id="warehouse-map-address" class="text-[11px] text-slate-300 hidden md:inline truncate max-w-xs"></span>
+      </div>
+
+      <!-- Action & Zoom Controls -->
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- Zoom Controls -->
+        <div class="flex items-center bg-slate-800 rounded-lg border border-slate-700 p-0.5 text-xs">
+          <button type="button" onclick="zoomWarehouseMap(-0.2)" class="px-2 py-1 text-slate-300 hover:text-white hover:bg-slate-700 rounded font-bold" title="Thu nhỏ (Zoom -)">-</button>
+          <span id="warehouse-map-zoom-level" class="px-2 text-[11px] font-mono text-sky-400 font-bold select-none">100%</span>
+          <button type="button" onclick="zoomWarehouseMap(0.2)" class="px-2 py-1 text-slate-300 hover:text-white hover:bg-slate-700 rounded font-bold" title="Phóng to (Zoom +)">+</button>
+          <button type="button" onclick="resetWarehouseMapZoom()" class="px-1.5 py-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded text-[10px]" title="Đặt lại 100%">1:1</button>
+        </div>
+
+        <!-- Toggle Half-Screen / Fullscreen -->
+        <button id="btn-toggle-map-size" type="button" onclick="toggleWarehouseMapSize()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition shadow-xs" title="Chuyển đổi Toàn màn hình / Nửa màn hình phía trên">
+          <svg id="icon-toggle-map-size" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 3 21 3 21 9"/>
+            <polyline points="9 21 3 21 3 15"/>
+            <line x1="21" y1="3" x2="14" y2="10"/>
+            <line x1="3" y1="21" x2="10" y2="14"/>
+          </svg>
+          <span id="text-toggle-map-size" class="hidden sm:inline">Toàn màn hình</span>
+        </button>
+
+        <!-- Fixed Top-Right Close Button -->
+        <button type="button" onclick="closeWarehouseMap()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs" title="Đóng bản đồ kho">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Đóng</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Map Viewport with Pan & Zoom -->
+    <div id="warehouse-map-viewport" class="flex-1 relative overflow-hidden bg-slate-950 cursor-grab active:cursor-grabbing select-none flex items-center justify-center p-2">
+      <div id="warehouse-map-stage" class="origin-center transition-transform duration-75 will-change-transform flex items-center justify-center">
+        <!-- SVG Floor Plan or Uploaded Image rendered dynamically -->
+      </div>
+      <div class="absolute bottom-2 left-3 bg-slate-900/85 backdrop-blur-xs text-[10px] text-slate-400 px-2 py-1 rounded-md border border-slate-700/60 pointer-events-none select-none">
+        Cuộn chuột để Phóng to/Thu nhỏ • Nhấn giữ chuột/chạm để Kéo bản đồ
+      </div>
+    </div>
+  </div>
 
   <!-- Toast Notification Container -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full px-3"></div>
