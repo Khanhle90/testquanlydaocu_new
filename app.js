@@ -4361,37 +4361,63 @@ function openLiveCamera(callback) {
 
   if (!modal || !video) return;
 
+  // Đảm bảo modal camera luôn nổi lên trên cùng (kể cả khi màn hình login z-index: 9999 đang mở)
+  modal.style.zIndex = "100050";
   modal.classList.remove("hidden");
   if (spinner) spinner.classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+
+  // Dừng stream cũ nếu còn đang chạy
+  if (liveCameraStream) {
+    try {
+      liveCameraStream.getTracks().forEach(t => t.stop());
+    } catch(e) {}
+    liveCameraStream = null;
+  }
+
+  const startStream = (constraints) => {
+    return navigator.mediaDevices.getUserMedia(constraints)
+      .then(stream => {
+        liveCameraStream = stream;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("autoplay", "true");
+        video.muted = true;
+        
+        // Lật gương video nếu đang dùng camera trước (selfie)
+        video.style.transform = (currentCameraFacing === "user") ? "scaleX(-1)" : "none";
+
+        video.onloadedmetadata = () => {
+          video.play().catch(e => console.warn("video.play() failed:", e));
+          if (spinner) spinner.classList.add("hidden");
+        };
+
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            if (spinner) spinner.classList.add("hidden");
+          }).catch(err => {
+            console.warn("Video play error:", err);
+            if (spinner) spinner.classList.add("hidden");
+          });
+        }
+      });
+  };
 
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: currentCameraFacing }
-    })
-    .then(stream => {
-      liveCameraStream = stream;
-      video.srcObject = stream;
-      video.play();
-      if (spinner) spinner.classList.add("hidden");
-    })
-    .catch(err => {
-      console.warn("getUserMedia with facingMode failed, retrying generic video:", err);
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          liveCameraStream = stream;
-          video.srcObject = stream;
-          video.play();
-          if (spinner) spinner.classList.add("hidden");
-        })
-        .catch(err2 => {
-          console.error("Camera access failed completely:", err2);
-          closeLiveCamera();
-          alert("Không thể mở máy ảnh trực tiếp (chưa cấp quyền hoặc thiết bị không có camera).\nVui lòng chọn ảnh từ tập tin máy tính/điện thoại.");
-        });
-    });
+    startStream({ video: { facingMode: currentCameraFacing } })
+      .catch(err => {
+        console.warn("getUserMedia with facingMode failed, retrying generic video:", err);
+        return startStream({ video: true });
+      })
+      .catch(err2 => {
+        console.error("Camera access failed completely:", err2);
+        closeLiveCamera();
+        alert("Không thể mở máy ảnh trực tiếp (chưa cấp quyền truy cập Camera hoặc thiết bị không có camera).\n\nBạn có thể nhấn 'Tải ảnh chân dung từ thiết bị' để chọn ảnh có sẵn!");
+      });
   } else {
     closeLiveCamera();
-    alert("Trình duyệt không hỗ trợ mở camera trực tiếp. Vui lòng chọn ảnh từ tập tin.");
+    alert("Trình duyệt không hỗ trợ mở camera trực tiếp. Vui lòng bấm 'Tải ảnh chân dung từ thiết bị' để chọn ảnh.");
   }
 }
 
@@ -4414,6 +4440,13 @@ function captureLivePhoto() {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d");
+
+  // Nếu đang dùng camera trước (user selfie), lật gương ngang để ảnh đúng chiều như nhìn gương
+  if (currentCameraFacing === "user") {
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+  }
+
   ctx.drawImage(video, 0, 0, w, h);
 
   const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
@@ -4427,8 +4460,14 @@ function captureLivePhoto() {
 
 function closeLiveCamera() {
   if (liveCameraStream) {
-    liveCameraStream.getTracks().forEach(t => t.stop());
+    try {
+      liveCameraStream.getTracks().forEach(t => t.stop());
+    } catch(e) {}
     liveCameraStream = null;
+  }
+  const video = document.getElementById("live-camera-video");
+  if (video) {
+    video.srcObject = null;
   }
   const modal = document.getElementById("modal-live-camera");
   if (modal) modal.classList.add("hidden");
@@ -8510,6 +8549,14 @@ async function pullFromGoogleSheet(silent = false) {
 }
 
 function openGSheetModal() {
+  const pin = prompt("🔐 XÁC THỰC BẢO MẬT QUẢN TRỊ:\n\nVui lòng nhập mã bảo mật của quản trị để truy cập Cấu hình kết nối Google Sheet:");
+  if (pin === null) return; // Người dùng bấm Hủy bỏ
+
+  if (pin.trim() !== "8888") {
+    alert("❌ Mã bảo mật quản trị không chính xác! Quyền truy cập cấu hình bị từ chối.");
+    return;
+  }
+
   const urlInput = document.getElementById("gsheet-webhook-url");
   if (urlInput) urlInput.value = state.gsheetConfig.url || DEFAULT_GSHEET_WEBHOOK_URL;
   const modal = document.getElementById("modal-gsheet");
@@ -9272,6 +9319,7 @@ async function handleUserLogin(event) {
 }
 
 function triggerLoginLiveCamera() {
+  currentCameraFacing = "user"; // Luôn ưu tiên Camera trước (Selfie) khi chụp nhận diện khuôn mặt
   openLiveCamera((imgUrl) => {
     pendingCapturedFace = imgUrl;
     const previewImg = document.getElementById("login-face-photo-preview");
@@ -9283,7 +9331,7 @@ function triggerLoginLiveCamera() {
     }
     if (placeholder) placeholder.classList.add("hidden");
     if (finishBtn) finishBtn.disabled = false;
-    showToast("Đã chụp ảnh khuôn mặt thành công! Bấm Xác Nhận để vào hệ thống.", "success");
+    showToast("Đã chụp ảnh khuôn mặt thành công! Bấm 'Xác Nhận & Vào Hệ Thống'.", "success");
   });
 }
 
@@ -9291,21 +9339,33 @@ function handleLoginFaceFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  compressImage(file, 600, 0.8, (blob) => {
-    uploadToImgBB(blob, (imgUrl) => {
-      pendingCapturedFace = imgUrl;
-      const previewImg = document.getElementById("login-face-photo-preview");
-      const placeholder = document.getElementById("login-face-placeholder");
-      const finishBtn = document.getElementById("btn-finish-first-login");
-      if (previewImg) {
-        previewImg.src = imgUrl;
-        previewImg.classList.remove("hidden");
-      }
-      if (placeholder) placeholder.classList.add("hidden");
-      if (finishBtn) finishBtn.disabled = false;
-      showToast("Đã tải ảnh chân dung khuôn mặt thành công!", "success");
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    pendingCapturedFace = dataUrl;
+    const previewImg = document.getElementById("login-face-photo-preview");
+    const placeholder = document.getElementById("login-face-placeholder");
+    const finishBtn = document.getElementById("btn-finish-first-login");
+    if (previewImg) {
+      previewImg.src = dataUrl;
+      previewImg.classList.remove("hidden");
+    }
+    if (placeholder) placeholder.classList.add("hidden");
+    if (finishBtn) finishBtn.disabled = false;
+    showToast("Đã chọn ảnh khuôn mặt thành công! Bấm 'Xác Nhận & Vào Hệ Thống'.", "success");
+
+    // Nén và tải ảnh lên ImgBB ngầm nếu có kết nối mạng để có link ảnh trực tuyến
+    compressImage(file, 600, 0.8, (blob) => {
+      uploadToImgBB(blob, (imgUrl) => {
+        if (imgUrl) {
+          pendingCapturedFace = imgUrl;
+          if (previewImg) previewImg.src = imgUrl;
+        }
+      });
     });
-  });
+  };
+  reader.readAsDataURL(file);
+  event.target.value = "";
 }
 
 function finishFirstTimeLogin() {
