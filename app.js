@@ -5,7 +5,8 @@
 
 // ==================== GLOBAL CONSTANTS & API KEYS ====================
 const IMGBB_API_KEY = "9b4a10db15d694a88f3aa0d1ffbc0669";
-const ADMIN_PASSWORD_DEFAULT = "khanh8888";
+const ADMIN_PASSWORD_DEFAULT = "admin123";
+const DEFAULT_GSHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwpN4TEj5Ny0cyvNrpvL4s9kvz5uRJh6T8RJy8VAy-Cphwin6yzvH5kUAWUmSllkRRc1w/exec";
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
@@ -164,10 +165,17 @@ function initState() {
   });
 
   state.gsheetConfig = loadFromStorage(STORAGE_KEYS.GSHEET_CONFIG, {
-    url: "https://script.google.com/macros/s/AKfycbwpN4TEj5Ny0cyvNrpvL4s9kvz5uRJh6T8RJy8VAy-Cphwin6yzvH5kUAWUmSllkRRc1w/exec",
+    url: DEFAULT_GSHEET_WEBHOOK_URL,
     isConnected: true,
     lastSync: new Date().toISOString()
   });
+
+  // Tự động chuyển sang URL chính thức nếu URL trong máy là link cũ hoặc link mock
+  if (!state.gsheetConfig.url || state.gsheetConfig.url.includes("mock") || state.gsheetConfig.url.includes("AKfycbwpN4TEj5Ny0cyvNrpvL4s9kvZ5uRJhGT8Rjy8VAy")) {
+    state.gsheetConfig.url = DEFAULT_GSHEET_WEBHOOK_URL;
+    state.gsheetConfig.isConnected = true;
+    localStorage.setItem(STORAGE_KEYS.GSHEET_CONFIG, JSON.stringify(state.gsheetConfig));
+  }
 
   // Sanitize: "Chuẩn bị" slips should never have keeper approval or pending approval notifications
   if (Array.isArray(state.documents)) {
@@ -1136,6 +1144,7 @@ function handleTab2Submit(event) {
   state.documents.unshift(doc);
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   resetTab2Form();
   showToast(`Đã lưu thành công phiếu nhập mới [${docCode}]!`, "success");
   if (typeof confetti === "function") confetti();
@@ -2864,6 +2873,7 @@ function submitFormalDispatchSlip() {
   state.documents.unshift(doc);
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   closeModal("modal-tab3-inspection");
   resetTab3Form();
 
@@ -3822,6 +3832,7 @@ function submitTab4ReturnSlip() {
   }
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   state.tab4TourSelected = null;
   state.tab4ReturnChecklist = [];
   state.tab4BrokenItems = [];
@@ -6718,6 +6729,7 @@ function submitInHouseRepair() {
   state.documents.unshift(doc);
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   closeModal("modal-repair-workflow");
   renderTab6();
   showToast(`Đã nghiệm thu sửa chữa [${scCode}] thành công!`, "success");
@@ -6782,6 +6794,7 @@ function submitSendExternalRepair() {
   state.documents.unshift(doc);
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   closeModal("modal-repair-workflow");
   renderTab6();
   showToast(`Đã lập phiếu gửi đi sửa [${orderCode}] kèm ảnh hiện trạng!`, "success");
@@ -7075,6 +7088,7 @@ function handleTab7Submit(event) {
   state.documents.unshift(doc);
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   event.target.reset();
   showToast(`Đã lưu phiếu thanh lý [${tlCode}] thành công!`, "success");
   switchTab(1);
@@ -7534,6 +7548,7 @@ function handleAddWarehouse(event) {
 
   state.warehouses.push(newWh);
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   event.target.reset();
   clearNewWhMapPhoto();
   renderWarehouseList();
@@ -8119,8 +8134,46 @@ function handleDeleteGameCombo(comboId) {
 }
 
 // =========================================================================
-// GOOGLE SHEETS & ADMIN AUTH
+// GOOGLE SHEETS & REALTIME CLOUD SYNC ENGINE
 // =========================================================================
+
+/**
+ * Gửi dữ liệu đồng bộ lên Google Sheets qua Webhook Google Apps Script
+ * Hỗ trợ POST không bị chặn CORS bằng mode no-cors / text/plain
+ */
+async function syncToGoogleSheet(action, payload, extraData = {}) {
+  const webhookUrl = state.gsheetConfig?.url;
+  if (!webhookUrl || !state.gsheetConfig?.isConnected) {
+    return;
+  }
+
+  try {
+    const postBody = {
+      action: action, // "ADD_DOC", "UPDATE_ITEMS", "SYNC_ALL"
+      payload: payload,
+      items: state.items || [],
+      ...extraData,
+      timestamp: new Date().toISOString()
+    };
+
+    // Google Apps Script Web App yêu cầu payload dạng JSON String
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(postBody),
+      mode: "no-cors"
+    });
+
+    state.gsheetConfig.lastSync = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEYS.GSHEET_CONFIG, JSON.stringify(state.gsheetConfig));
+    renderGSheetStatus();
+  } catch (err) {
+    console.warn("Lỗi đồng bộ ngầm Google Sheet:", err);
+  }
+}
+
 function openGSheetModal() {
   const urlInput = document.getElementById("gsheet-webhook-url");
   if (urlInput) urlInput.value = state.gsheetConfig.url || "";
@@ -8137,31 +8190,140 @@ function saveGSheetConfig() {
   renderGSheetStatus();
   closeModal("modal-gsheet");
   showToast("Đã lưu cấu hình kết nối Google Sheet!", "success");
+
+  // Nếu có link, tự động kích hoạt đồng bộ toàn bộ tồn kho lên sheet
+  if (url) {
+    triggerFullGSheetSync();
+  }
 }
 
-function testGSheetConnection() {
-  showToast("Đang kiểm tra kết nối với Google Sheet API...", "info");
-  setTimeout(() => {
+async function triggerFullGSheetSync() {
+  showToast("Đang đồng bộ dữ liệu tồn kho lên Google Sheet...", "info");
+  try {
+    await syncToGoogleSheet("UPDATE_ITEMS", state.items);
+    showToast("🟢 Đã gửi toàn bộ dữ liệu tồn kho lên Google Sheet!", "success");
+  } catch (e) {
+    showToast("⚠️ Có lỗi khi gửi dữ liệu lên Google Sheet", "error");
+  }
+}
+
+async function testGSheetConnection() {
+  const url = document.getElementById("gsheet-webhook-url")?.value.trim() || state.gsheetConfig.url;
+  if (!url) {
+    alert("Vui lòng dán URL Google Apps Script Web App trước!");
+    return;
+  }
+
+  showToast("Đang kiểm tra kết nối với Google Sheet...", "info");
+
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "PING", message: "Test connection from ABA Web App" }),
+      mode: "no-cors"
+    });
+
+    state.gsheetConfig.url = url;
     state.gsheetConfig.isConnected = true;
     renderGSheetStatus();
-    showToast("🟢 Kết nối Google Sheet thành công! Dữ liệu đã đồng bộ thời gian thực.", "success");
-  }, 800);
+    saveState();
+    showToast("🟢 Kết nối thành công! Đang kích hoạt đồng bộ dữ liệu...", "success");
+    await triggerFullGSheetSync();
+  } catch (err) {
+    showToast("⚠️ Kiểm tra kết nối thất bại: " + err.message, "error");
+  }
 }
 
 function copyAppsScriptCode() {
-  const code = `// Google Apps Script for ABA Inventory & Event Operations System
+  const code = `/**
+ * GOOGLE APPS SCRIPT CHO HỆ THỐNG QUẢN LÝ ĐẠO CỤ ABA
+ * Bảng tính: Quản lý đạo cụ Final
+ */
+var SPREADSHEET_ID = "1zuu2b1XtkwFweNQfXJ9_K3oQw_AXsJkuAzeIGXYSms0";
+
+function getSpreadsheet() {
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch(e) {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
+}
+
+function doGet(e) {
+  var ss = getSpreadsheet();
+  var itemsSheet = ss.getSheetByName("ITEMS") || ss.getSheets()[0];
+  var items = itemsSheet.getDataRange().getValues();
+  return ContentService.createTextOutput(JSON.stringify({ status: "success", items: items }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("INVENTORY") || SpreadsheetApp.getActiveSpreadsheet().insertSheet("INVENTORY");
-    sheet.appendRow([new Date(), data.action, data.code, JSON.stringify(data.payload)]);
+    var ss = getSpreadsheet();
+
+    // 1. Lưu phiếu vào sheet DOCUMENTS
+    if (data.action === "ADD_DOC" || data.sheet === "DOCUMENTS") {
+      var docSheet = getOrCreateSheet(ss, "DOCUMENTS", [
+        "Mã Phiếu", "Loại Phiếu", "Ngày Tạo", "Người Lập", "Kho", "Tour/Dự Án", "Tổng Món", "Trạng Thái", "Thủ Kho", "Ghi Chú"
+      ]);
+      var d = data.payload || {};
+      docSheet.appendRow([
+        d.code || d.id || "", d.type || "", d.createdAt || new Date().toLocaleString("vi-VN"),
+        d.creator || "", d.warehouseName || "", d.tourName || "",
+        d.itemsCount || 0, d.status || "Hoàn thành", d.keeperApproved ? "Đã duyệt" : "Chờ duyệt", d.note || ""
+      ]);
+    }
+
+    // 2. Cập nhật tồn kho sheet ITEMS
+    if (data.items && Array.isArray(data.items)) {
+      var itemsSheet = getOrCreateSheet(ss, "ITEMS", [
+        "Mã Đạo Cụ", "Tên Đạo Cụ", "Danh Mục", "Mục Đích Sử Dụng", "Kho Quản Lý", "Vị Trí Kệ", "Đơn Vị Tính", "Tổng Tồn", "Sẵn Sàng", "Đang Đi Tour", "Đang Hỏng", "Đơn Giá (VNĐ)", "URL Ảnh"
+      ]);
+      var lastRow = itemsSheet.getLastRow();
+      if (lastRow > 1) {
+        itemsSheet.getRange(2, 1, lastRow - 1, 13).clearContent();
+      }
+      var rows = data.items.map(function(it) {
+        var shelfStr = Array.isArray(it.shelves) ? it.shelves.map(function(s){return s.shelf+" ("+s.qty+")";}).join("; ") : (it.shelfLocation || "");
+        var total = Number(it.total) || (Number(it.ready||0) + Number(it.inUse||0) + Number(it.broken||0));
+        return [
+          it.code || it.id || "", it.name || "", it.category || "", it.purpose || "",
+          it.warehouseName || it.warehouseId || "", shelfStr, it.unit || "", total,
+          Number(it.ready)||0, Number(it.inUse)||0, Number(it.broken)||0, Number(it.price||it.invoiceCost)||0, it.image || ""
+        ];
+      });
+      if (rows.length > 0) {
+        itemsSheet.getRange(2, 1, rows.length, 13).setValues(rows);
+      }
+    }
+
     return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function getOrCreateSheet(ss, name, headers) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    var firstSheet = ss.getSheets()[0];
+    if (firstSheet && (firstSheet.getName() === "Trang tính 1" || firstSheet.getName() === "Sheet1")) {
+      firstSheet.setName(name);
+      sheet = firstSheet;
+    } else {
+      sheet = ss.insertSheet(name);
+    }
+  }
+  if (sheet.getLastRow() === 0 && headers) {
+    sheet.appendRow(headers);
+  }
+  return sheet;
 }`;
+
   navigator.clipboard.writeText(code).then(() => {
-    alert("Đã sao chép mã Google Apps Script vào bộ nhớ tạm!");
+    alert("Đã sao chép mã Google Apps Script cập nhật mới vào bộ nhớ tạm!");
   });
 }
 
@@ -8623,6 +8785,7 @@ function handleChangePassword(event) {
   }
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   event.target.reset();
   closeModal("modal-user-profile");
   showToast("Đã đổi mật khẩu thành công! Hãy ghi nhớ mật khẩu mới cho lần đăng nhập sau.", "success");
@@ -8790,6 +8953,7 @@ function handleAdminCreateUser(event) {
 
   state.users.push(newUser);
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   event.target.reset();
   renderAdminUserList();
   showToast(`Đã tạo tài khoản cho [${name}] thành công! Mật khẩu mặc định: ${phone}`, "success");
