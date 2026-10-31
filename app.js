@@ -8159,6 +8159,7 @@ async function syncToGoogleSheet(action, payload, extraData = {}) {
       items: state.items || [],
       warehouses: state.warehouses || [],
       documents: state.documents || [],
+      tours: state.tours || [],
       ...extraData,
       timestamp: new Date().toISOString()
     };
@@ -8255,6 +8256,31 @@ async function pullFromGoogleSheet(silent = false) {
 
         if (parsedItems.length > 0) {
           state.items = parsedItems;
+          changed = true;
+        }
+      }
+
+      // 3. Cập nhật danh sách Tour / Sự kiện từ Google Sheet
+      if (Array.isArray(result.data.tours) && result.data.tours.length > 0) {
+        const parsedTours = result.data.tours.map(t => {
+          if (t["Dữ Liệu Chi Tiết (JSON)"]) {
+            try { return JSON.parse(t["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
+          }
+          return {
+            id: t["Mã Tour"] || `PROG-${Date.now()}`,
+            name: t["Tên Chương Trình"] || "",
+            location: t["Địa Điểm Tổ Chức"] || "",
+            startDate: t["Ngày Bắt Đầu"] || "",
+            endDate: t["Ngày Kết Thúc"] || "",
+            status: t["Trạng Thái"] || "Đang vận hành",
+            leader: t["Điều Hành Tour"] || "",
+            totalItems: Number(t["Tổng Món Đang Giữ"]) || 0,
+            props: []
+          };
+        }).filter(t => t.name);
+
+        if (parsedTours.length > 0) {
+          state.tours = parsedTours;
           changed = true;
         }
       }
