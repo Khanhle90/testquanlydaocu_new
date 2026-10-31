@@ -1629,7 +1629,10 @@
             <i data-lucide="sheet" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-900">Cấu Hình Kết Nối Google Sheet</h3>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-1.5">
+              <span>Cấu Hình Kết Nối Google Sheet</span>
+              <span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">Admin</span>
+            </h3>
             <p class="text-xs text-slate-500">Đồng bộ dữ liệu thời gian thực 2 chiều</p>
           </div>
         </div>
@@ -2276,46 +2279,44 @@
   </div>
 
   <!-- LIVE CAMERA VIEWFINDER MODAL -->
-  <div id="modal-live-camera" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay">
-    <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-xs" onclick="closeLiveCamera()"></div>
-    <div class="bg-slate-900 rounded-2xl max-w-lg w-full overflow-hidden z-10 shadow-2xl modal-content p-4 space-y-3 border border-slate-700 text-white">
+  <div id="modal-live-camera" class="fixed inset-0 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay" style="z-index: 100050;">
+    <div class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm" onclick="closeLiveCamera()"></div>
+    <div class="relative bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden z-20 shadow-2xl modal-content p-4 sm:p-5 space-y-3.5 border border-slate-700 text-white">
       <div class="flex items-center justify-between pb-2 border-b border-slate-700">
         <div class="flex items-center gap-2">
           <i data-lucide="camera" class="w-5 h-5 text-sky-400"></i>
-          <h3 class="text-sm font-bold text-white">Máy Ảnh Trực Tiếp</h3>
+          <h3 class="text-sm font-bold text-white">Máy Ảnh Chụp Hình Trực Tiếp</h3>
         </div>
-        <button type="button" onclick="closeLiveCamera()" class="p-1 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        <button type="button" onclick="closeLiveCamera()" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
       
       <!-- Viewfinder Screen -->
-      <div class="relative bg-black rounded-xl overflow-hidden aspect-4/3 flex items-center justify-center border border-slate-800">
+      <div class="relative bg-black rounded-2xl overflow-hidden aspect-4/3 flex items-center justify-center border border-slate-800 shadow-inner">
         <video id="live-camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
         <canvas id="live-camera-canvas" class="hidden"></canvas>
-        <div id="camera-loading-spinner" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-xs text-slate-300 gap-2">
-          <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-sky-400"></i>
-          <span>Đang khởi động máy ảnh...</span>
+        <div id="camera-loading-spinner" class="absolute inset-0 flex flex-col items-center justify-center bg-black/75 text-xs text-slate-300 gap-2">
+          <i data-lucide="loader-2" class="w-7 h-7 animate-spin text-sky-400"></i>
+          <span class="font-semibold">Đang kết nối ống kính máy ảnh...</span>
         </div>
       </div>
 
       <!-- Controls -->
       <div class="flex items-center justify-between pt-1">
-        <button type="button" onclick="switchCameraFacing()" id="btn-switch-camera" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 transition">
+        <button type="button" onclick="switchCameraFacing()" id="btn-switch-camera" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 transition">
           <i data-lucide="refresh-cw" class="w-4 h-4 text-sky-400"></i>
-          <span>Đổi camera</span>
+          <span>Đổi camera trước/sau</span>
         </button>
 
         <!-- Big Capture Button -->
-        <button type="button" onclick="captureLivePhoto()" class="w-14 h-14 rounded-full bg-white border-4 border-sky-500 hover:bg-sky-50 active:scale-95 transition shadow-lg flex items-center justify-center text-slate-900" title="Bấm để chụp ảnh">
-          <div class="w-10 h-10 rounded-full bg-red-600"></div>
+        <button type="button" onclick="captureLivePhoto()" class="w-16 h-16 rounded-full bg-white border-4 border-sky-500 hover:bg-sky-50 active:scale-95 transition shadow-xl flex items-center justify-center text-slate-900 cursor-pointer" title="Bấm để chụp ảnh">
+          <div class="w-11 h-11 rounded-full bg-red-600 flex items-center justify-center shadow-inner">
+            <i data-lucide="camera" class="w-5 h-5 text-white"></i>
+          </div>
         </button>
 
-        <button type="button" onclick="closeLiveCamera()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+        <button type="button" onclick="closeLiveCamera()" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
           Đóng
         </button>
-      </div>
-    </div>
-  </div>
-
       </div>
     </div>
   </div>
@@ -2557,19 +2558,30 @@
           </div>
         </div>
 
+        <!-- Hidden file inputs for Native Camera and File picker -->
+        <input type="file" id="login-face-native-cam" accept="image/*" capture="user" class="hidden" onchange="handleLoginFaceFileUpload(event)">
         <input type="file" id="login-face-file-input" accept="image/*" class="hidden" onchange="handleLoginFaceFileUpload(event)">
 
         <div class="space-y-2">
+          <!-- Option 1: Live WebRTC Camera (Works on Desktop Webcam & Phone) -->
           <button type="button" onclick="triggerLoginLiveCamera()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2">
             <i data-lucide="camera" class="w-4 h-4"></i>
-            <span>Mở Camera / Webcam Chụp Khuôn Mặt</span>
+            <span>Mở Camera / Webcam Trực Tiếp</span>
           </button>
 
+          <!-- Option 2: Native Phone Camera (Opens Phone's Camera App) -->
+          <button type="button" onclick="document.getElementById('login-face-native-cam').click()" class="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 border border-indigo-200">
+            <i data-lucide="smartphone" class="w-4 h-4"></i>
+            <span>Chụp Bằng Camera Điện Thoại (Tự Động)</span>
+          </button>
+
+          <!-- Option 3: Upload from Gallery / Device Files -->
           <button type="button" onclick="document.getElementById('login-face-file-input').click()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5">
             <i data-lucide="upload" class="w-3.5 h-3.5"></i>
-            <span>Hoặc tải ảnh chân dung từ thiết bị</span>
+            <span>Hoặc chọn ảnh chân dung có sẵn</span>
           </button>
 
+          <!-- Confirm & Finish -->
           <button type="button" id="btn-finish-first-login" onclick="finishFirstTimeLogin()" disabled class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2">
             <i data-lucide="check-circle" class="w-4 h-4"></i>
             <span>Xác Nhận & Vào Hệ Thống</span>
