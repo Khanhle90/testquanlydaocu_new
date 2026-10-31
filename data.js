@@ -621,6 +621,9 @@ const INITIAL_PREP_SLIPS = [
   {
     id: "PREP-20261030-01",
     code: "CB_20261030_01",
+    slipType: "PREPARATION", // Phiếu chuẩn bị đồ (chuyển đổi từ nút xuất kho)
+    type: "Phiếu chuẩn bị đồ",
+    typeLabel: "Phiếu chuẩn bị đồ",
     tourId: "PROG-2026-02",
     tourName: "Hội thao Tập đoàn Viettel - 400 Khách",
     location: "Khu đô thị Ecopark, Hưng Yên",
@@ -630,6 +633,7 @@ const INITIAL_PREP_SLIPS = [
     status: "PENDING_STAGING", // 'PENDING_STAGING' (Chờ gom đồ) | 'STAGED' (Đã gom ra vị trí chuẩn bị)
     stagedPhoto: null,
     stagedAt: null,
+    source: "MANUAL",
     items: [
       { name: "Dây thừng kéo co 4 hướng phi 32", qty: 2, unit: "Bộ", shelf: "Kệ Game A1", tier: "1" },
       { name: "Cờ tiêu chuẩn đánh dấu 4 màu", qty: 8, unit: "Chiếc", shelf: "Ống Cờ Sảnh A", tier: "1" },
@@ -640,7 +644,10 @@ const INITIAL_PREP_SLIPS = [
   },
   {
     id: "PREP-20261030-02",
-    code: "CB_20261030_02",
+    code: "GD_20261030_02",
+    slipType: "GATHERING", // Phiếu gom đồ (danh sách đồ cần lấy sau khi gửi file Excel lên)
+    type: "Phiếu gom đồ",
+    typeLabel: "Phiếu gom đồ",
     tourId: "PROG-2026-03",
     tourName: "Kickoff Sales Techcombank - 150 Khách",
     location: "Khu du lịch Đồ Sơn, Hải Phòng",
@@ -650,12 +657,39 @@ const INITIAL_PREP_SLIPS = [
     status: "PENDING_STAGING",
     stagedPhoto: null,
     stagedAt: null,
+    source: "EXCEL",
     items: [
       { name: "Máy thổi khí công suất lớn 1500W", qty: 1, unit: "Chiếc", shelf: "Kệ Máy Điện D1", tier: "1" },
       { name: "Cuộn dây điện nguồn 20m", qty: 1, unit: "Cuộn", shelf: "Kệ Điện D01", tier: "2" },
       { name: "Loa kéo di động công suất khủng 800W", qty: 1, unit: "Chiếc", shelf: "Phòng Âm Thanh", tier: "1" }
     ],
     note: "Đóng gói cẩn thận thiết bị âm thanh và dây điện."
+  }
+];
+
+// Danh sách phiếu chờ hậu kiểm tại khu vực hậu kiểm (Nhân sự dỡ xe về kho tập kết kiểm đếm sau)
+const INITIAL_POST_CHECK_SLIPS = [
+  {
+    id: "HK-20261029-01",
+    code: "HK_20261029_01",
+    tourId: "PROG-2026-04",
+    tourName: "Ngày hội Gia đình Tân Á Đại Thành - 350 Khách",
+    location: "Công viên Yên Sở, Hà Nội",
+    returnerName: "Lê Hoàng Long",
+    returnerPhone: "0901234567",
+    returnerAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    checkerName: "Nguyễn Văn An",
+    checkerAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    createdAt: "2026-10-29 17:45",
+    photo: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80",
+    status: "PENDING_INSPECTION", // PENDING_INSPECTION | COMPLETED
+    totalItems: 8,
+    items: [
+      { id: "A001", name: "Bánh xe bạt PVC khổng lồ (D=2.2m)", unit: "Chiếc", qty: 2, category: "Đồ hơi", type: "Khấu hao", shelf: "Khu vực Hậu kiểm", goodQty: 2, brokenQty: 0, targetShelf: "Giá Hơi 01 - Tầng 1" },
+      { id: "A004", name: "Máy thổi khí công suất lớn 1500W", unit: "Chiếc", qty: 2, category: "Dụng cụ/Máy móc/Phương tiện", type: "Khấu hao", shelf: "Khu vực Hậu kiểm", goodQty: 2, brokenQty: 0, targetShelf: "Kệ Máy Điện D1 - Tầng 1" },
+      { id: "A008", name: "Dây thừng kéo cố định bánh xe 20m", unit: "Cuộn", qty: 4, category: "Dụng cụ/Máy móc/Phương tiện", type: "Khấu hao", shelf: "Khu vực Hậu kiểm", goodQty: 4, brokenQty: 0, targetShelf: "Kệ Dây D02 - Tầng 2" }
+    ],
+    note: "Đồ tập kết tại sàn khu vực hậu kiểm Mỹ Đình, cần lau khô và kiểm tra van hơi trước khi cất kệ."
   }
 ];
 

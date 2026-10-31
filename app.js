@@ -29,7 +29,8 @@ const STORAGE_KEYS = {
   GSHEET_CONFIG: "ABA_GSHEET_CONFIG_V4",
   NOTIFICATIONS: "ABA_NOTIFICATIONS_V5",
   FIELD_TRANSFERS: "ABA_FIELD_TRANSFERS_V5",
-  PREP_SLIPS: "ABA_PREP_SLIPS_V5"
+  PREP_SLIPS: "ABA_PREP_SLIPS_V5",
+  POST_CHECK_SLIPS: "ABA_POST_CHECK_SLIPS_V1"
 };
 
 const ALL_CATEGORIES = [
@@ -147,6 +148,21 @@ function initState() {
   state.notifications = loadFromStorage(STORAGE_KEYS.NOTIFICATIONS, typeof INITIAL_NOTIFICATIONS !== "undefined" ? INITIAL_NOTIFICATIONS : []);
   state.fieldTransfers = loadFromStorage(STORAGE_KEYS.FIELD_TRANSFERS, typeof INITIAL_FIELD_TRANSFERS !== "undefined" ? INITIAL_FIELD_TRANSFERS : []);
   state.prepSlips = loadFromStorage(STORAGE_KEYS.PREP_SLIPS, typeof INITIAL_PREP_SLIPS !== "undefined" ? INITIAL_PREP_SLIPS : []);
+  state.postCheckSlips = loadFromStorage(STORAGE_KEYS.POST_CHECK_SLIPS, typeof INITIAL_POST_CHECK_SLIPS !== "undefined" ? INITIAL_POST_CHECK_SLIPS : []);
+  
+  // Sanitize prepSlips: ensure slipType is distinguished
+  (state.prepSlips || []).forEach(s => {
+    if (!s.slipType) {
+      if (s.code?.startsWith("GD_") || s.source === "EXCEL" || s.type === "Phiếu gom đồ") {
+        s.slipType = "GATHERING";
+        s.typeLabel = "Phiếu gom đồ";
+      } else {
+        s.slipType = "PREPARATION";
+        s.typeLabel = "Phiếu chuẩn bị đồ";
+      }
+    }
+  });
+
   state.gsheetConfig = loadFromStorage(STORAGE_KEYS.GSHEET_CONFIG, {
     url: "https://script.google.com/macros/s/AKfycbz_aba_mock/exec",
     isConnected: true,
@@ -187,6 +203,7 @@ function saveState() {
   localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(state.notifications));
   localStorage.setItem(STORAGE_KEYS.FIELD_TRANSFERS, JSON.stringify(state.fieldTransfers));
   localStorage.setItem(STORAGE_KEYS.PREP_SLIPS, JSON.stringify(state.prepSlips || []));
+  localStorage.setItem(STORAGE_KEYS.POST_CHECK_SLIPS, JSON.stringify(state.postCheckSlips || []));
   localStorage.setItem(STORAGE_KEYS.GSHEET_CONFIG, JSON.stringify(state.gsheetConfig));
 }
 
@@ -216,6 +233,7 @@ function renderApp() {
   renderGSheetStatus();
   renderNotifications();
   populateCommonDropdowns();
+  updateTab4Badge();
 
   switchTab(state.activeTab, false);
 
@@ -252,10 +270,10 @@ function renderGSheetStatus() {
 
   if (state.gsheetConfig.isConnected) {
     pulseEl.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 live-pulse";
-    textEl.textContent = "Google Sheet: Đã kết nối";
+    textEl.textContent = "Đã kết nối";
   } else {
     pulseEl.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
-    textEl.textContent = "Google Sheet: Mất kết nối";
+    textEl.textContent = "Mất kết nối";
   }
 }
 
@@ -264,6 +282,7 @@ function populateCommonDropdowns() {
     "tab1-filter-warehouse",
     "tab2-warehouse",
     "tab3-warehouse",
+    "tab4-warehouse",
     "tab7-warehouse",
     "tab8-filter-warehouse"
   ];
@@ -316,6 +335,13 @@ function populateCommonDropdowns() {
     }
     comboSelect.innerHTML = html;
   }
+}
+
+// Cuộn mượt lên đầu trang áp dụng cho tất cả các tab
+function scrollToTopAllTabs() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const activePanel = document.querySelector('.tab-panel:not(.hidden)');
+  if (activePanel) activePanel.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ==================== TAB NAVIGATION ====================
@@ -662,11 +688,28 @@ function importInventoryExcel(event) {
 // =========================================================================
 function renderTab2() {
   populateCommonDropdowns();
+
+  // Đặt ngày nhập mặc định là ngày hôm nay nếu chưa có
+  const dateEl = document.getElementById("tab2-date");
+  if (dateEl && !dateEl.value) {
+    dateEl.value = formatDate(new Date(), 'YYYY-MM-DD');
+  }
+
+  handleTab2WarehouseChanged();
   updateTab2CodePreview();
   renderTab2Pills();
   renderTab2ShelfRows();
   updateTab2ShelfValidation();
   renderTab2Album();
+}
+
+function handleTab2WarehouseChanged() {
+  const whId = document.getElementById("tab2-warehouse")?.value;
+  const wh = state.warehouses.find(w => w.id === whId) || state.warehouses[0];
+  const labelEl = document.getElementById("tab2-selected-warehouse-label");
+  if (labelEl && wh) {
+    labelEl.textContent = wh.name;
+  }
 }
 
 function resetTab2Form() {
@@ -685,8 +728,12 @@ function resetTab2Form() {
   const minStockEl = document.getElementById("tab2-minstock");
   if (minStockEl) minStockEl.value = "0";
 
+  const dateEl = document.getElementById("tab2-date");
+  if (dateEl) dateEl.value = formatDate(new Date(), 'YYYY-MM-DD');
+
   setTab2Mode('NEW');
   setTab2Type('Khấu hao');
+  handleTab2WarehouseChanged();
   renderTab2Pills();
   renderTab2ShelfRows();
   updateTab2ShelfValidation();
@@ -1114,7 +1161,8 @@ function renderTab3() {
 }
 
 // =========================================================================
-// TAB 3: WAREHOUSE STAGING PREPARATION SLIPS (PHIẾU CHUẨN BỊ ĐỒ)
+// =========================================================================
+// TAB 3: WAREHOUSE STAGING PREPARATION SLIPS (PHÂN BIỆT PHIẾU CHUẨN BỊ & PHIẾU GOM ĐỒ)
 // =========================================================================
 function renderTab3PrepSlipsBanner() {
   const banner = document.getElementById("tab3-prep-slips-banner");
@@ -1129,41 +1177,80 @@ function renderTab3PrepSlipsBanner() {
   const pendingSlips = slips.filter(s => s.status === "PENDING_STAGING");
   const stagedSlips = slips.filter(s => s.status === "STAGED");
 
+  // Đếm theo từng loại phiếu: Phiếu chuẩn bị đồ vs Phiếu gom đồ
+  const prepCount = pendingSlips.filter(s => s.slipType !== "GATHERING" && !s.code?.startsWith("GD_") && s.type !== "Phiếu gom đồ").length;
+  const gomCount = pendingSlips.filter(s => s.slipType === "GATHERING" || s.code?.startsWith("GD_") || s.type === "Phiếu gom đồ").length;
+
   let pendingHtml = "";
   if (pendingSlips.length > 0) {
     pendingHtml = `
-      <div class="p-3.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/10 border-2 border-amber-400 rounded-2xl shadow-xs space-y-2">
-        <div class="flex items-center justify-between">
+      <div class="p-3.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/10 border-2 border-amber-400 rounded-2xl shadow-xs space-y-2.5">
+        <div class="flex items-center justify-between flex-wrap gap-2">
           <div class="flex items-center gap-2">
             <span class="p-1.5 rounded-lg bg-amber-500 text-white font-bold text-xs shadow-2xs">
               <i data-lucide="bell" class="w-4 h-4"></i>
             </span>
             <div>
-              <div class="font-extrabold text-xs sm:text-sm text-amber-950 flex items-center gap-1.5">
-                <span>CÓ PHIẾU CHUẨN BỊ ĐỒ CẦN GOM RA "VỊ TRÍ CHUẨN BỊ ĐỒ"</span>
+              <div class="font-extrabold text-xs sm:text-sm text-amber-950 flex items-center gap-1.5 flex-wrap">
+                <span>CÓ PHIẾU CHUẨN BỊ ĐỒ & GOM ĐỒ CẦN XỬ LÝ</span>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white">${pendingSlips.length} Phiếu</span>
               </div>
-              <p class="text-[11px] text-amber-800">Thủ kho mở phiếu để gom đạo cụ từ các giá kệ tập kết về vị trí chuẩn bị trước khi xe tải tới nhận</p>
+              <p class="text-[11px] text-amber-800">Phiếu chuẩn bị đồ ấn vào để mở thẳng bảng xuất đồ • Phiếu gom đồ (Excel) mở để gom hoặc chuyển đổi</p>
             </div>
+          </div>
+          <!-- Phân loại số lượng -->
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="px-2 py-0.5 rounded-lg font-bold bg-purple-100 text-purple-900 border border-purple-200">
+              📋 Phiếu chuẩn bị: ${prepCount}
+            </span>
+            <span class="px-2 py-0.5 rounded-lg font-bold bg-cyan-100 text-cyan-900 border border-cyan-200">
+              📦 Phiếu gom đồ (Excel): ${gomCount}
+            </span>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-          ${pendingSlips.map(slip => `
-            <div class="p-2.5 bg-white/95 rounded-xl border border-amber-300 flex items-center justify-between gap-2 shadow-2xs">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="font-black text-xs text-amber-900">${slip.code}</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800">Chờ gom đồ</span>
+          ${pendingSlips.map(slip => {
+            const isGom = (slip.slipType === "GATHERING" || slip.code?.startsWith("GD_") || slip.type === "Phiếu gom đồ");
+            if (isGom) {
+              // Phiếu gom đồ (Excel)
+              return `
+              <div onclick="openGomSlipModal('${slip.id}')" class="p-2.5 bg-white rounded-xl border border-cyan-300 flex items-center justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-cyan-500 transition cursor-pointer group">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-black text-xs text-cyan-900">${slip.code}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-extrabold bg-cyan-100 text-cyan-800 border border-cyan-200">📦 Phiếu gom đồ (Excel)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800">Chờ gom</span>
+                  </div>
+                  <div class="font-bold text-xs text-slate-800 truncate mt-1">${slip.tourName}</div>
+                  <div class="text-[10px] text-slate-500">📍 ${slip.location || 'Tại kho'} • ${slip.items ? slip.items.length : 0} mục đạo cụ</div>
                 </div>
-                <div class="font-bold text-xs text-slate-800 truncate mt-0.5">${slip.tourName}</div>
-                <div class="text-[10px] text-slate-500">📍 ${slip.location} • ${slip.items.length} mục đạo cụ</div>
+                <button type="button" onclick="event.stopPropagation(); openGomSlipModal('${slip.id}')" class="shrink-0 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1 cursor-pointer">
+                  <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                  <span>Gom Đồ</span>
+                </button>
               </div>
-              <button type="button" onclick="openPrepSlipModal('${slip.id}')" class="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1">
-                <i data-lucide="package" class="w-3.5 h-3.5"></i>
-                <span>Gom Đồ</span>
-              </button>
-            </div>
-          `).join("")}
+              `;
+            } else {
+              // Phiếu chuẩn bị đồ (ấn vào mở thẳng bảng xuất đồ như 1 phiếu xuất đồ thông thường)
+              return `
+              <div onclick="applyPrepSlipToExport('${slip.id}')" class="p-2.5 bg-white rounded-xl border border-purple-300 flex items-center justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-purple-500 transition cursor-pointer group">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-black text-xs text-purple-900">${slip.code}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-extrabold bg-purple-100 text-purple-800 border border-purple-200">📋 Phiếu chuẩn bị đồ</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">Sẵn sàng xuất</span>
+                  </div>
+                  <div class="font-bold text-xs text-slate-800 truncate mt-1">${slip.tourName}</div>
+                  <div class="text-[10px] text-slate-500">📍 ${slip.location || 'Tại kho'} • ${slip.items ? slip.items.length : 0} mục đạo cụ</div>
+                </div>
+                <button type="button" onclick="event.stopPropagation(); applyPrepSlipToExport('${slip.id}')" class="shrink-0 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1 cursor-pointer" title="Ấn để mở toàn bộ danh sách ra bảng xuất đồ">
+                  <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>
+                  <span>Mở Phiếu Xuất</span>
+                </button>
+              </div>
+              `;
+            }
+          }).join("")}
         </div>
       </div>
     `;
@@ -1183,15 +1270,16 @@ function renderTab3PrepSlipsBanner() {
           ${stagedSlips.map(slip => `
             <div class="p-2 bg-white rounded-lg border border-emerald-200 flex items-center justify-between gap-2">
               <div class="truncate">
-                <strong class="text-emerald-900">${slip.code}</strong> - <span class="font-medium text-slate-800">${slip.tourName}</span> <span class="text-slate-500">(${slip.items.length} món)</span>
+                <strong class="text-emerald-900">${slip.code}</strong>
+                <span class="text-[10px] px-1.5 py-0.2 rounded font-bold bg-purple-100 text-purple-800 ml-1">
+                  Phiếu chuẩn bị đồ
+                </span>
+                - <span class="font-medium text-slate-800">${slip.tourName}</span> <span class="text-slate-500">(${slip.items ? slip.items.length : 0} món)</span>
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
-                <button type="button" onclick="openPrepSlipModal('${slip.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold">
-                  Chi tiết
-                </button>
-                <button type="button" onclick="applyPrepSlipToExport('${slip.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                <button type="button" onclick="applyPrepSlipToExport('${slip.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer">
                   <i data-lucide="zap" class="w-3 h-3"></i>
-                  <span>Nạp Nhanh Vào Phiếu Xuất</span>
+                  <span>Nạp Vào Phiếu Xuất</span>
                 </button>
               </div>
             </div>
@@ -1205,7 +1293,9 @@ function renderTab3PrepSlipsBanner() {
   if (window.lucide) lucide.createIcons();
 }
 
-function openPrepSlipModal(slipId) {
+const gomSlipTempPhoto = {};
+
+function openGomSlipModal(slipId) {
   const slip = (state.prepSlips || []).find(s => s.id === slipId);
   if (!slip) return;
 
@@ -1216,21 +1306,30 @@ function openPrepSlipModal(slipId) {
 
   if (!modal || !body) return;
 
-  if (badge) badge.textContent = slip.code;
-  if (subtitle) subtitle.textContent = `${slip.tourName} • ${slip.warehouseName}`;
+  const modalH3 = modal.querySelector("h3");
+  if (modalH3) {
+    modalH3.innerHTML = `
+      <span>📦 Phiếu Gom Đồ (Tải Lên Từ Excel)</span>
+      <span id="prep-slip-code-badge" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-cyan-200 text-cyan-900">${slip.code}</span>
+    `;
+  }
 
-  const isPending = (slip.status === "PENDING_STAGING");
+  if (subtitle) {
+    subtitle.textContent = `Gom hàng từ các giá kệ theo danh sách file Excel • ${slip.tourName}`;
+  }
+
+  const teamPhoto = gomSlipTempPhoto[slipId] || slip.teamPhoto;
 
   body.innerHTML = `
     <!-- Slip Information Header -->
     <div class="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
       <div>
-        <div><strong class="text-slate-700">Chương trình / Dự án:</strong> <span class="text-sky-900 font-bold">${slip.tourName}</span></div>
-        <div class="mt-1"><strong class="text-slate-700">Địa điểm tổ chức:</strong> ${slip.location}</div>
+        <div><strong class="text-slate-700">Chương trình / Dự án:</strong> <span class="text-cyan-950 font-bold">${slip.tourName}</span></div>
+        <div class="mt-1"><strong class="text-slate-700">Địa điểm tổ chức:</strong> ${slip.location || 'Tại kho'}</div>
       </div>
       <div>
-        <div><strong class="text-slate-700">Ngày diễn ra:</strong> ${slip.eventDate}</div>
-        <div class="mt-1"><strong class="text-slate-700">Kho chuẩn bị:</strong> ${slip.warehouseName}</div>
+        <div><strong class="text-slate-700">Ngày diễn ra:</strong> ${slip.eventDate || 'Hôm nay'}</div>
+        <div class="mt-1"><strong class="text-slate-700">Kho chuẩn bị:</strong> ${slip.warehouseName || 'Kho Tổng'}</div>
       </div>
       ${slip.note ? `
         <div class="col-span-2 pt-1.5 border-t border-slate-200 text-slate-600 italic">
@@ -1239,111 +1338,186 @@ function openPrepSlipModal(slipId) {
       ` : ''}
     </div>
 
-    <!-- Items Picking Checklist Cards (Thiết kế gọn gàng cho điện thoại, không cuộn ngang, nhìn thấy ngay: tên đồ, đơn vị, SL, vị trí, nút xóa) -->
+    <!-- Items Picking Checklist Cards -->
     <div class="space-y-2">
       <div class="flex items-center justify-between font-bold text-slate-800 text-xs">
         <span class="flex items-center gap-1.5">
-          <i data-lucide="list-checks" class="w-4 h-4 text-amber-600"></i>
-          <span>Danh Sách Đạo Cụ Cần Gom (${slip.items.length} món):</span>
+          <i data-lucide="package" class="w-4 h-4 text-cyan-600"></i>
+          <span>Danh Sách Đạo Cụ Cần Gom (${slip.items ? slip.items.length : 0} món):</span>
         </span>
-        <span class="text-[11px] font-normal text-slate-500">Gom về Vị trí chuẩn bị đồ</span>
+        <span class="text-[11px] font-normal text-slate-500">Lấy từ các giá kệ kho</span>
       </div>
 
-      <div class="space-y-2">
-        ${slip.items.map((it, idx) => `
-          <div class="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs hover:border-amber-300 transition">
+      <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+        ${(slip.items || []).map((it, idx) => `
+          <div class="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs hover:border-cyan-300 transition">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
                 <span class="text-slate-400 font-bold text-[10px] w-4">${idx + 1}.</span>
-                <span class="font-bold text-slate-800 text-xs truncate">${it.name}</span>
+                <span class="font-bold text-slate-800 text-xs truncate">${escapeHtml(it.name)}</span>
               </div>
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 pl-5 text-[11px] text-slate-500">
-                <span>Số lượng: <strong class="text-amber-800 text-xs">${it.qty}</strong> <span class="text-slate-700 font-medium">${it.unit}</span></span>
+                <span>Số lượng: <strong class="text-cyan-800 text-xs">${it.qty}</strong> <span class="text-slate-700 font-medium">${it.unit || 'Chiếc'}</span></span>
                 <span>•</span>
                 <span>📍 Vị trí kho: <strong class="text-slate-700 font-medium">${it.shelf || 'Khu vực kho'}${it.tier ? ' (Tầng ' + it.tier + ')' : ''}</strong></span>
               </div>
             </div>
-            ${isPending ? `
-              <button type="button" onclick="deletePrepSlipItem('${slip.id}', ${idx})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition shrink-0" title="Xóa món này khỏi phiếu chuẩn bị">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-              </button>
-            ` : ''}
+            <button type="button" onclick="deletePrepSlipItem('${slip.id}', ${idx})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition shrink-0" title="Xóa món này">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
           </div>
         `).join("")}
       </div>
     </div>
 
-    <!-- Staging Confirmation Action / Result (Bắt buộc bật máy ảnh chụp xong mới ấn gửi được) -->
-    ${isPending ? `
-      <div class="p-3.5 bg-amber-50 border border-amber-300 rounded-xl space-y-3">
-        <div class="text-xs text-amber-950 font-bold flex items-center justify-between">
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="camera" class="w-4 h-4 text-amber-600"></i>
-            <span>Ảnh Chụp Vị Trí Chuẩn Bị Đồ (Bắt buộc máy ảnh):</span>
-          </span>
-          <span class="text-[10px] text-amber-700 font-normal italic">* Chụp xong mới ấn gửi được</span>
-        </div>
-
-        <!-- Live Camera Trigger & Preview -->
-        <div>
-          ${prepSlipTempPhoto[slip.id] ? `
-            <div class="relative w-full h-40 rounded-xl overflow-hidden border-2 border-emerald-500 shadow-xs mb-2">
-              <img src="${prepSlipTempPhoto[slip.id]}" class="w-full h-full object-cover">
-              <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] shadow-xs">
-                ✓ Đã chụp ảnh vị trí chuẩn bị
-              </div>
-            </div>
-          ` : `
-            <div class="w-full py-6 rounded-xl border-2 border-dashed border-amber-300 bg-white/70 flex flex-col items-center justify-center p-3 text-center mb-2">
-              <i data-lucide="camera" class="w-8 h-8 text-amber-500 mb-1 opacity-70"></i>
-              <span class="text-xs font-bold text-amber-900">Chưa có ảnh vị trí chuẩn bị đồ</span>
-              <span class="text-[10px] text-amber-700">Bấm nút máy ảnh dưới đây để chụp</span>
-            </div>
-          `}
-          
-          <button type="button" onclick="capturePrepSlipCamera('${slip.id}')" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2 text-xs">
-            <i data-lucide="camera" class="w-4 h-4"></i>
-            <span>${prepSlipTempPhoto[slip.id] ? '📷 Chụp Lại Ảnh Vị Trí Chuẩn Bị' : '📷 Bật Máy Ảnh Chụp Vị Trí Chuẩn Bị'}</span>
-          </button>
-        </div>
-
-        <div class="pt-2 border-t border-amber-200">
-          <button type="button" id="btn-submit-prep-slip" onclick="submitPrepSlipStaging('${slip.id}')" ${!prepSlipTempPhoto[slip.id] ? 'disabled' : ''} class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-xs sm:text-sm rounded-xl transition shadow flex items-center justify-center gap-2">
-            <i data-lucide="check-circle" class="w-4 h-4"></i>
-            <span>Gửi & Xác Nhận Hoàn Thành Phiếu</span>
-          </button>
-        </div>
+    <!-- Team Photo Section: BẮT BUỘC CHỤP ẢNH CẢ ĐỘI XUẤT ĐỒ -->
+    <div class="p-3.5 bg-cyan-50/70 border-2 border-cyan-300 rounded-xl space-y-2.5">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-bold text-cyan-950 flex items-center gap-1.5">
+          <i data-lucide="camera" class="w-4 h-4 text-cyan-700"></i>
+          <span>Ảnh Cả Đội Xuất Đồ (Bắt buộc):</span>
+        </span>
+        <span class="text-[10px] text-rose-600 font-bold italic">* Phải có ảnh mới xác nhận lấy đồ được</span>
       </div>
-    ` : `
-      <div class="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-3">
-        <div class="flex items-center justify-between text-xs">
-          <span class="font-bold text-emerald-900 flex items-center gap-1.5">
-            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
-            <span>Đã gom xong ra "Vị trí chuẩn bị đồ" (${slip.stagedAt})</span>
-          </span>
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-200 text-emerald-900">Hoàn thành</span>
-        </div>
-        ${slip.stagedPhoto ? `
-          <div>
-            <span class="text-[11px] font-bold text-slate-700 block mb-1">Ảnh vị trí chuẩn bị đồ:</span>
-            <div class="rounded-xl border border-emerald-300 overflow-hidden h-40 bg-slate-100">
-              <img src="${slip.stagedPhoto}" alt="Vị trí chuẩn bị đồ" class="w-full h-full object-cover">
-            </div>
+
+      ${teamPhoto ? `
+        <div class="relative w-full h-40 rounded-xl overflow-hidden border-2 border-emerald-500 shadow-xs">
+          <img src="${teamPhoto}" class="w-full h-full object-cover">
+          <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] shadow-xs flex items-center gap-1">
+            <i data-lucide="check" class="w-3 h-3"></i>
+            <span>✓ Đã có ảnh cả đội xuất đồ</span>
           </div>
-        ` : ''}
-        <button type="button" onclick="applyPrepSlipToExport('${slip.id}')" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow flex items-center justify-center gap-2">
-          <i data-lucide="zap" class="w-4 h-4"></i>
-          <span>⚡ Nạp Toàn Bộ Danh Sách Vào Bảng Xuất Kho (Tab 3)</span>
+        </div>
+      ` : `
+        <div class="w-full py-5 rounded-xl border-2 border-dashed border-cyan-300 bg-white flex flex-col items-center justify-center p-3 text-center">
+          <i data-lucide="users" class="w-8 h-8 text-cyan-500 mb-1 opacity-70"></i>
+          <span class="text-xs font-bold text-cyan-950">Chưa có ảnh cả đội xuất đồ</span>
+          <span class="text-[10px] text-cyan-700">Chụp ảnh tập thể đội trước khi xe xuất hàng</span>
+        </div>
+      `}
+
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="captureGomTeamPhoto('${slip.id}')" class="flex-1 py-2 bg-cyan-700 hover:bg-cyan-800 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>${teamPhoto ? '📷 Chụp Lại Ảnh Đội' : '📷 Bật Máy Ảnh Chụp Đội'}</span>
+        </button>
+        <label class="flex-1 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer">
+          <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
+          <span>📁 Tải File Ảnh</span>
+          <input type="file" accept="image/*" class="hidden" onchange="uploadGomTeamPhoto(event, '${slip.id}')">
+        </label>
+      </div>
+    </div>
+
+    <!-- 2 Distinct Actions -->
+    <div class="pt-2 border-t border-slate-200 space-y-2">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <!-- Action 1: Chuyển thành phiếu chuẩn bị đồ -->
+        <button type="button" onclick="convertGomSlipToPrep('${slip.id}')" class="py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer" title="Chuyển thành phiếu chuẩn bị đồ và tự động xóa phiếu gom đồ">
+          <i data-lucide="clipboard-pen" class="w-4 h-4"></i>
+          <span>Chuyển Thành Phiếu Chuẩn Bị</span>
+        </button>
+
+        <!-- Action 2: Xác nhận lấy đồ thành công (Bắt buộc có ảnh đội) -->
+        <button type="button" onclick="confirmGomSlipSuccess('${slip.id}')" class="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer" title="Xác nhận lấy đồ thành công (bắt buộc có ảnh cả đội) và tự động xóa phiếu gom đồ">
+          <i data-lucide="check-check" class="w-4 h-4"></i>
+          <span>Xác Nhận Lấy Đồ Thành Công</span>
         </button>
       </div>
-    `}
+      <p class="text-[10px] text-slate-400 text-center italic">
+        * Khi ấn chuyển thành phiếu chuẩn bị hoặc xác nhận lấy đồ thành công thì phiếu gom đồ này sẽ tự động xóa.
+      </p>
+    </div>
   `;
 
   modal.classList.remove("hidden");
   if (window.lucide) lucide.createIcons();
 }
 
-const prepSlipTempPhoto = {};
+function captureGomTeamPhoto(slipId) {
+  openLiveCamera((imgUrl) => {
+    gomSlipTempPhoto[slipId] = imgUrl;
+    openGomSlipModal(slipId);
+    showToast("Đã chụp ảnh cả đội xuất đồ thành công!", "success");
+  });
+}
+
+function uploadGomTeamPhoto(event, slipId) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    gomSlipTempPhoto[slipId] = e.target.result;
+    openGomSlipModal(slipId);
+    showToast("Đã tải ảnh cả đội xuất đồ thành công!", "success");
+  };
+  reader.readAsDataURL(file);
+  event.target.value = "";
+}
+
+function convertGomSlipToPrep(slipId) {
+  const slipIndex = (state.prepSlips || []).findIndex(s => s.id === slipId);
+  if (slipIndex === -1) return;
+  const gomSlip = state.prepSlips[slipIndex];
+
+  const prepCode = `CB_${formatDate(new Date(), 'YYYYMMDD')}_${Math.floor(10 + Math.random() * 90)}`;
+  const prepSlip = {
+    id: `PREP-CB-${Date.now()}`,
+    code: prepCode,
+    slipType: "PREPARATION",
+    type: "Phiếu chuẩn bị đồ",
+    typeLabel: "Phiếu chuẩn bị đồ",
+    tourName: gomSlip.tourName,
+    location: gomSlip.location || "Tại kho",
+    eventDate: gomSlip.eventDate || formatDate(new Date(), 'YYYY-MM-DD'),
+    warehouseId: gomSlip.warehouseId || "WH-MD",
+    warehouseName: gomSlip.warehouseName || "Kho Tổng Mỹ Đình",
+    status: "PENDING_STAGING",
+    stagedPhoto: null,
+    stagedAt: null,
+    items: JSON.parse(JSON.stringify(gomSlip.items || [])),
+    source: "CONVERTED",
+    note: `Phiếu chuẩn bị đồ chuyển đổi từ Phiếu gom đồ [${gomSlip.code}].`
+  };
+
+  // Phiếu gom đồ tự động xóa đi
+  state.prepSlips.splice(slipIndex, 1);
+  // Thêm phiếu chuẩn bị đồ mới
+  state.prepSlips.unshift(prepSlip);
+  saveState();
+
+  closeModal("modal-prep-slip");
+  renderTab3PrepSlipsBanner();
+  applyPrepSlipToExport(prepSlip.id);
+  showToast(`Đã chuyển đổi thành Phiếu chuẩn bị đồ [${prepCode}] và tự động xóa phiếu gom đồ!`, "success");
+}
+
+function confirmGomSlipSuccess(slipId) {
+  const slipIndex = (state.prepSlips || []).findIndex(s => s.id === slipId);
+  if (slipIndex === -1) return;
+  const gomSlip = state.prepSlips[slipIndex];
+
+  const teamPhoto = gomSlipTempPhoto[slipId];
+  if (!teamPhoto) {
+    alert("⚠️ BẮT BUỘC CHỤP ẢNH CẢ ĐỘI XUẤT ĐỒ!\n\nVui lòng bật máy ảnh chụp hoặc tải ảnh cả đội xuất đồ trước khi có thể xác nhận lấy đồ thành công.");
+    return;
+  }
+
+  // Lưu ảnh cả đội vào state xuất kho
+  state.tab3TeamPhoto = teamPhoto;
+
+  // Nạp toàn bộ danh sách đồ vào bảng xuất kho
+  applyPrepSlipToExport(slipId);
+
+  // Phiếu gom đồ tự động xóa đi sau khi xác nhận lấy đồ thành công
+  state.prepSlips.splice(slipIndex, 1);
+  delete gomSlipTempPhoto[slipId];
+  saveState();
+
+  closeModal("modal-prep-slip");
+  renderTab3PrepSlipsBanner();
+  showToast(`✅ Đã xác nhận lấy đồ thành công cho [${gomSlip.tourName}]! Phiếu gom đồ tự động xóa.`, "success");
+}
 
 function deletePrepSlipItem(slipId, itemIdx) {
   const slip = (state.prepSlips || []).find(s => s.id === slipId);
@@ -1352,78 +1526,9 @@ function deletePrepSlipItem(slipId, itemIdx) {
   const itemName = slip.items[itemIdx].name;
   slip.items.splice(itemIdx, 1);
   saveState();
-  openPrepSlipModal(slipId);
+  openGomSlipModal(slipId);
   renderTab3PrepSlipsBanner();
-  showToast(`Đã xóa món [${itemName}] khỏi phiếu chuẩn bị!`, "info");
-}
-
-function capturePrepSlipCamera(slipId) {
-  openLiveCamera((imgUrl) => {
-    prepSlipTempPhoto[slipId] = imgUrl;
-    openPrepSlipModal(slipId);
-    showToast("Đã chụp ảnh vị trí chuẩn bị thành công! Giờ bạn có thể ấn Gửi xác nhận.", "success");
-  });
-}
-
-function submitPrepSlipStaging(slipId) {
-  const slip = (state.prepSlips || []).find(s => s.id === slipId);
-  if (!slip) return;
-
-  const photo = prepSlipTempPhoto[slipId];
-  if (!photo) {
-    alert("Bắt buộc phải bật máy ảnh chụp vị trí chuẩn bị đồ trước khi ấn gửi hoàn thành phiếu!");
-    return;
-  }
-
-  const btn = document.getElementById("btn-submit-prep-slip");
-  if (btn) btn.disabled = true;
-
-  // Kiểm tra tồn kho: Hết hàng thì không thể xác nhận lấy đồ được
-  const missingItems = [];
-  (slip.items || []).forEach(pItem => {
-    const inv = state.items.find(i => i.name.toLowerCase() === pItem.name.toLowerCase() && (slip.warehouseId ? i.warehouseId === slip.warehouseId : true)) ||
-                state.items.find(i => i.name.toLowerCase() === pItem.name.toLowerCase());
-    const ready = inv ? (inv.ready || 0) : 0;
-    if (ready <= 0 || ready < pItem.qty) {
-      missingItems.push({ name: pItem.name, req: pItem.qty, stock: ready });
-    }
-  });
-
-  if (missingItems.length > 0) {
-    alert(`⚠️ KHÔNG THỂ XÁC NHẬN LẤY ĐỒ DO ĐẠO CỤ HẾT HÀNG!\n\nCó ${missingItems.length} món không đủ tồn kho tại kho:\n${missingItems.map(m => `• ${m.name} (Cần: ${m.req}, Tồn kho: ${m.stock})`).join("\n")}\n\nVui lòng kiểm tra lại trước khi xác nhận lấy đồ!`);
-    if (btn) btn.disabled = false;
-    return;
-  }
-
-  // 1. Hỏi bạn đã lưu toàn bộ đồ ra vị trí chuẩn bị đồ cho chương trình chưa?
-  const ans = confirm("1. Bạn đã lưu toàn bộ đồ ra vị trí chuẩn bị đồ cho chương trình chưa?\n\n(Bấm 'OK' nếu Rồi, 'Cancel' nếu Chưa)");
-  if (!ans) {
-    if (btn) btn.disabled = false;
-    return;
-  }
-
-  slip.status = "STAGED";
-  slip.stagedPhoto = photo;
-  slip.stagedAt = formatDateTime(new Date());
-
-  // Cập nhật vị trí lưu mới trong kho của các món đạo cụ này thành "Vị trí chuẩn bị đồ"
-  (slip.items || []).forEach(pItem => {
-    const item = state.items.find(i => i.name.toLowerCase() === pItem.name.toLowerCase());
-    if (item) {
-      if (!item.shelves) item.shelves = [];
-      const prepShelf = item.shelves.find(s => s.shelf === "Vị trí chuẩn bị đồ");
-      if (prepShelf) {
-        prepShelf.qty = (prepShelf.qty || 0) + pItem.qty;
-      } else {
-        item.shelves.push({ shelf: "Vị trí chuẩn bị đồ", tier: "Mặt sàn", qty: pItem.qty });
-      }
-    }
-  });
-
-  saveState();
-  renderTab3PrepSlipsBanner();
-  openPrepSlipModal(slipId);
-  showToast("✓ Đã gom đồ thành công! Vị trí các món trong kho đã được chuyển sang 'Vị trí chuẩn bị đồ'.", "success");
+  showToast(`Đã xóa món [${itemName}] khỏi phiếu gom!`, "info");
 }
 
 function applyPrepSlipToExport(slipId) {
@@ -1436,25 +1541,30 @@ function applyPrepSlipToExport(slipId) {
   const whSelect = document.getElementById("tab3-warehouse");
 
   if (nameInput) nameInput.value = slip.tourName;
-  if (locInput) locInput.value = slip.location;
-  if (dateInput) dateInput.value = slip.eventDate;
+  if (locInput) locInput.value = slip.location || "Tại kho";
+  if (dateInput) dateInput.value = slip.eventDate || formatDate(new Date(), 'YYYY-MM-DD');
   if (whSelect && slip.warehouseId) whSelect.value = slip.warehouseId;
 
   state.tab3Combos = [];
   state.tab3DirectRows = (slip.items || []).map((it, idx) => ({
     id: `DIR-${Date.now()}-${idx + 1}`,
     name: it.name,
-    unit: it.unit,
+    unit: it.unit || "Chiếc",
     qty: it.qty,
     readyStock: it.qty,
-    shelf: "Vị trí chuẩn bị đồ",
+    shelf: it.shelf || "Vị trí chuẩn bị đồ",
     itemId: null
   }));
 
   closeModal("modal-prep-slip");
   switchTab(3);
   renderTab3Table();
-  showToast(`Đã nạp toàn bộ danh sách đạo cụ từ phiếu chuẩn bị [${slip.code}] vào bảng xuất kho!`, "success");
+
+  // Scroll smoothly down to the export table
+  const tbl = document.getElementById("tab3-export-table");
+  if (tbl) tbl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  showToast(`Đã hiển thị toàn bộ danh sách đồ từ [${slip.code}] ra phiếu xuất đồ!`, "success");
 }
 
 function initTab3DirectRows() {
@@ -2381,8 +2491,61 @@ function importTab3Excel(event) {
 
       renderTab3Table();
 
-      let infoMsg = `Đã nhập thành công ${countSuccess} món vào bảng xuất!`;
-      if (parsedProjectName) infoMsg += ` (Tự động điền dự án: ${parsedProjectName})`;
+      // Tự động tạo "Phiếu gom đồ" có danh sách đồ cần lấy sau khi gửi file Excel lên
+      const excelGomItems = [];
+      rows.forEach(r => {
+        const rawCode = String(r["Mã Đồ"] || r["Mã đồ"] || r["Ma Do"] || r["Mã Đạo Cụ"] || r["Mã"] || r["Code"] || "").trim();
+        const rawName = String(r["Tên Đồ"] || r["Tên đồ"] || r["Ten Do"] || r["Tên Đạo Cụ"] || r["Tên Đạo cụ"] || r["Tên"] || r["Name"] || "").trim();
+        const qty = Math.max(1, Number(r["Số Lượng"] || r["Số lượng"] || r["So Luong"] || r["SL"] || r["Qty"] || 1));
+        const unit = String(r["Đơn Vị Tính"] || r["Đơn vị tính"] || r["ĐVT"] || r["Don Vi Tinh"] || r["DVT"] || r["Unit"] || "").trim();
+        if (!rawCode && !rawName) return;
+
+        let match = null;
+        if (rawCode) {
+          match = state.items.find(i => (i.code || "").toLowerCase() === rawCode.toLowerCase());
+        }
+        if (!match && rawName) {
+          match = state.items.find(i => i.name.toLowerCase() === rawName.toLowerCase());
+        }
+
+        excelGomItems.push({
+          name: match ? match.name : (rawName || rawCode),
+          qty: qty,
+          unit: match ? (match.unit || unit || "Chiếc") : (unit || "ĐVT"),
+          shelf: match && match.shelves && match.shelves[0] ? match.shelves[0].shelf : "Khu vực kho",
+          tier: match && match.shelves && match.shelves[0] ? match.shelves[0].tier : "1"
+        });
+      });
+
+      if (excelGomItems.length > 0) {
+        const gdCode = `GD_${formatDate(new Date(), 'YYYYMMDD')}_${Math.floor(10 + Math.random() * 90)}`;
+        const whObj = state.warehouses.find(w => w.id === whId) || state.warehouses[0];
+        const gomSlip = {
+          id: `PREP-GD-${Date.now()}`,
+          code: gdCode,
+          slipType: "GATHERING", // Phiếu gom đồ (sau khi gửi file Excel lên)
+          type: "Phiếu gom đồ",
+          typeLabel: "Phiếu gom đồ",
+          tourName: parsedProjectName || "Dự án tải lên từ Excel",
+          location: parsedLocation || "Tại kho",
+          eventDate: parsedDate || formatDate(new Date(), 'YYYY-MM-DD'),
+          warehouseId: whId || (whObj ? whObj.id : "WH-MD"),
+          warehouseName: whObj ? whObj.name : "Kho Tổng Mỹ Đình",
+          status: "PENDING_STAGING",
+          stagedPhoto: null,
+          stagedAt: null,
+          items: excelGomItems,
+          source: "EXCEL",
+          note: "Phiếu gom đồ tự động tạo theo danh sách đồ cần lấy từ file Excel gửi lên."
+        };
+        if (!state.prepSlips) state.prepSlips = [];
+        state.prepSlips.unshift(gomSlip);
+        saveState();
+        renderTab3PrepSlipsBanner();
+      }
+
+      let infoMsg = `Đã nhập thành công ${countSuccess} món vào bảng xuất & tạo Phiếu gom đồ!`;
+      if (parsedProjectName) infoMsg += ` (Dự án: ${parsedProjectName})`;
       if (countWarning > 0) {
         showToast(`Đã nhập ${countSuccess + countWarning} món (${countWarning} món chưa nhận diện - có dòng cảnh báo)!`, "warning");
       } else {
@@ -2518,7 +2681,38 @@ function saveTab3PreparationSlip() {
 
   // Phiếu chuẩn bị là phiếu nháp gom đồ nội bộ, không gửi yêu cầu duyệt tới thủ kho
   state.documents.unshift(doc);
+
+  // Tạo và thêm "Phiếu chuẩn bị đồ" vào state.prepSlips (Phiếu đã ấn vào nút chuyển thành phiếu chuẩn bị đồ)
+  const prepSlip = {
+    id: `PREP-CB-${Date.now()}`,
+    code: prepCode,
+    slipType: "PREPARATION", // Phiếu chuẩn bị đồ (chuyển đổi từ nút)
+    type: "Phiếu chuẩn bị đồ",
+    typeLabel: "Phiếu chuẩn bị đồ",
+    tourName: pName,
+    location: pLoc || wh.name,
+    eventDate: document.getElementById("tab3-project-date")?.value || formatDate(new Date(), 'YYYY-MM-DD'),
+    warehouseId: whId,
+    warehouseName: wh.name,
+    status: "PENDING_STAGING",
+    stagedPhoto: null,
+    stagedAt: null,
+    items: exportItems.map(it => ({
+      name: it.name,
+      qty: it.qty,
+      unit: it.unit,
+      shelf: it.shelf || "Khu vực kho",
+      tier: it.tier || "1"
+    })),
+    source: "MANUAL",
+    note: "Phiếu chuẩn bị đồ chuyển từ Bảng xuất kho ra Vị trí chuẩn bị đồ."
+  };
+
+  if (!state.prepSlips) state.prepSlips = [];
+  state.prepSlips.unshift(prepSlip);
+
   saveState();
+  renderTab3PrepSlipsBanner();
   showToast(`Đã chuyển thành phiếu chuẩn bị đồ [${prepCode}]!`, "success");
 }
 
@@ -2692,9 +2886,13 @@ function renderTab4() {
   if (state.tab4TourSelected) {
     loadTab4TourData(state.tab4TourSelected.id);
   }
+
+  renderTab4PostCheckBanner();
+  updateTab4Badge();
 }
 
 function loadTab4TourData(tourId) {
+  state.activePostCheckingSlipId = null;
   const tour = state.tours.find(t => t.id === tourId);
   state.tab4TourSelected = tour || null;
   const banner = document.getElementById("tab4-tour-banner");
@@ -2709,11 +2907,37 @@ function loadTab4TourData(tourId) {
 
   if (banner) {
     banner.classList.remove("hidden");
-    document.getElementById("tab4-banner-tourname").textContent = tour.name;
-    document.getElementById("tab4-banner-location").textContent = `📍 ${tour.location}`;
-    document.getElementById("tab4-banner-leader").textContent = tour.leader || "N/A";
-    document.getElementById("tab4-banner-total").textContent = `${tour.totalItems || 0} món`;
+    const modeBadge = document.getElementById("tab4-banner-mode-badge");
+    if (modeBadge) {
+      modeBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-black bg-sky-600 text-white flex items-center gap-1 shadow-2xs";
+      modeBadge.innerHTML = `<i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i><span>THU HỒI CHƯƠNG TRÌNH</span>`;
+    }
+    const tn = document.getElementById("tab4-banner-tourname");
+    if (tn) tn.textContent = tour.name;
+    const loc = document.getElementById("tab4-banner-location");
+    if (loc) loc.textContent = `📍 ${tour.location}`;
+    const tot = document.getElementById("tab4-banner-total");
+    if (tot) tot.textContent = `${tour.totalItems || 0} món`;
+
+    // Locked "Người trả đồ trước đó"
+    const retInput = document.getElementById("tab4-banner-returner");
+    if (retInput) retInput.value = tour.leader || "Chưa rõ phụ trách";
+
+    // Locked "Người thực hiện" based on logged-in account
+    const chkInput = document.getElementById("tab4-banner-checker");
+    if (chkInput) chkInput.value = `${state.currentUser ? state.currentUser.name : 'Nguyễn Văn An'} (${state.currentUser ? state.currentUser.phone : 'Thủ kho'})`;
+
+    // Kho tiếp nhận hoàn trả
+    const whSel = document.getElementById("tab4-warehouse");
+    if (whSel && tour.warehouseId) {
+      if (Array.from(whSel.options).some(o => o.value === tour.warehouseId)) {
+        whSel.value = tour.warehouseId;
+      }
+    }
   }
+
+  const submitBtnSpan = document.querySelector("#tab4 button[onclick='submitTab4ReturnSlip()'] span");
+  if (submitBtnSpan) submitBtnSpan.textContent = "Hoàn Tất Nhập Kho (NK_...)";
 
   state.tab4ReturnChecklist = (tour.props || []).map((p, idx) => ({
     id: `RET-${idx}`,
@@ -2734,6 +2958,147 @@ function loadTab4TourData(tourId) {
 
   renderTab4ReturnTable();
   renderTab4BrokenTable();
+  if (window.lucide) lucide.createIcons();
+}
+
+function loadTab4PostCheckSlip(slipId) {
+  const slip = (state.postCheckSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+
+  state.activePostCheckingSlipId = slipId;
+
+  // Giả lập tour selected để vượt qua kiểm tra submit
+  state.tab4TourSelected = {
+    id: slip.tourId || `POSTCHECK-${slip.id}`,
+    name: slip.tourName,
+    location: slip.location || "Tại kho",
+    leader: slip.returnerName || "Lê Hoàng Long",
+    totalItems: slip.totalItems || (slip.items ? slip.items.reduce((acc, i) => acc + (i.qty || 0), 0) : 0),
+    props: slip.items || []
+  };
+
+  const banner = document.getElementById("tab4-tour-banner");
+  if (banner) {
+    banner.classList.remove("hidden");
+    const modeBadge = document.getElementById("tab4-banner-mode-badge");
+    if (modeBadge) {
+      modeBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500 text-white flex items-center gap-1 shadow-2xs";
+      modeBadge.innerHTML = `<i data-lucide="archive" class="w-3.5 h-3.5"></i><span>PHIẾU HẬU KIỂM: ${slip.code}</span>`;
+    }
+    const tn = document.getElementById("tab4-banner-tourname");
+    if (tn) tn.textContent = slip.tourName;
+    const loc = document.getElementById("tab4-banner-location");
+    if (loc) loc.textContent = `📍 ${slip.location || 'Tại kho'}`;
+    const tot = document.getElementById("tab4-banner-total");
+    if (tot) tot.textContent = `${state.tab4TourSelected.totalItems} món`;
+
+    // Locked "Người trả đồ trước đó"
+    const retInput = document.getElementById("tab4-banner-returner");
+    if (retInput) retInput.value = slip.returnerName || "Lê Hoàng Long";
+
+    // Locked "Người thực hiện" based on current logged in user
+    const chkInput = document.getElementById("tab4-banner-checker");
+    if (chkInput) chkInput.value = `${state.currentUser ? state.currentUser.name : 'Nguyễn Văn An'} (${state.currentUser ? state.currentUser.phone : 'Thủ kho'})`;
+
+    // Kho tiếp nhận hoàn trả
+    const whSel = document.getElementById("tab4-warehouse");
+    if (whSel) {
+      const whId = slip.warehouseId || "WH-MD";
+      if (Array.from(whSel.options).some(o => o.value === whId)) {
+        whSel.value = whId;
+      }
+    }
+  }
+
+  // Load items into Tab 4 return checklist (Vị trí để đồ lưu mới: Phân bổ các kệ kho mới)
+  state.tab4ReturnChecklist = (slip.items || []).map((it, idx) => {
+    const rawShelf = it.targetShelf || it.shelf || "Giá A";
+    let sName = rawShelf;
+    let sTier = "1";
+    if (rawShelf.includes("-")) {
+      const parts = rawShelf.split("-");
+      sName = parts[0].trim();
+      sTier = parts[1].replace(/Tầng|tầng/g, "").trim() || "1";
+    }
+    const gQty = (it.goodQty !== undefined) ? it.goodQty : it.qty;
+    return {
+      id: `RET-HK-${idx}`,
+      itemId: it.id || `ITEM-HK-${idx}`,
+      comboId: null,
+      comboName: null,
+      name: it.name,
+      unit: it.unit || "Chiếc",
+      dispatchedQty: it.qty,
+      goodQty: gQty,
+      shelves: [
+        { shelf: sName, tier: sTier, qty: gQty }
+      ],
+      shelf: sName,
+      tier: sTier,
+      warehouseId: slip.warehouseId || "WH-MD"
+    };
+  });
+
+  // Broken items from slip (nếu có)
+  state.tab4BrokenItems = [];
+  (slip.items || []).forEach((it, idx) => {
+    if (it.brokenQty && it.brokenQty > 0) {
+      state.tab4BrokenItems.push({
+        id: `BROKEN-HK-${Date.now()}-${idx}`,
+        name: it.name,
+        qty: it.brokenQty,
+        shelf: "Khu vực đồ hỏng",
+        reason: "Cần kiểm tra khắc phục",
+        photos: []
+      });
+    }
+  });
+
+  // Hiển thị ảnh đồ lưu kho hậu kiểm (nếu có)
+  if (slip.photo) {
+    state.tab4UnloadPhoto = slip.photo;
+    const preview = document.getElementById("tab4-unload-photo-preview");
+    if (preview) {
+      preview.classList.remove("hidden");
+      const img = preview.querySelector("img");
+      if (img) img.src = slip.photo;
+    }
+    const statusEl = document.getElementById("tab4-unload-photo-status");
+    if (statusEl) statusEl.textContent = "✓ Ảnh đồ lưu kho hậu kiểm (Có sẵn)";
+  }
+
+  // Đổi nút submit thành Hoàn tất hậu kiểm & Nhập kho
+  const submitBtnSpan = document.querySelector("#tab4 button[onclick='submitTab4ReturnSlip()'] span");
+  if (submitBtnSpan) submitBtnSpan.textContent = `Hoàn Tất Hậu Kiểm (${slip.code})`;
+
+  renderTab4ReturnTable();
+  renderTab4BrokenTable();
+
+  // Scroll smoothly down to the banner
+  if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  showToast(`Đã mở phiếu hậu kiểm [${slip.code}]! Hãy kiểm tra, phân bổ vị trí lưu mới và hoàn tất nhập kho.`, "info");
+  if (window.lucide) lucide.createIcons();
+}
+
+function cancelTab4ActiveProgram() {
+  state.activePostCheckingSlipId = null;
+  state.tab4TourSelected = null;
+  state.tab4ReturnChecklist = [];
+  state.tab4BrokenItems = [];
+
+  const sel = document.getElementById("tab4-tour-select");
+  if (sel) sel.value = "";
+
+  const banner = document.getElementById("tab4-tour-banner");
+  if (banner) banner.classList.add("hidden");
+
+  const submitBtnSpan = document.querySelector("#tab4 button[onclick='submitTab4ReturnSlip()'] span");
+  if (submitBtnSpan) submitBtnSpan.textContent = "Hoàn Tất Nhập Kho (NK_...)";
+
+  renderTab4ReturnTable();
+  renderTab4BrokenTable();
+  showToast("Đã hủy chọn chương trình.", "info");
 }
 
 function toggleTab4ComboCollapse(comboId) {
@@ -3165,74 +3530,153 @@ function uploadBrokenPhotoFile(event, brokenId) {
 
 function renderTab4BrokenTable() {
   const tbody = document.getElementById("tab4-broken-table-body");
-  if (!tbody) return;
+  const mobileContainer = document.getElementById("tab4-broken-mobile-cards");
 
   if (state.tab4BrokenItems.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-slate-400 italic text-[11px]">Không có đồ hỏng nào được khai báo (hoàn hảo)</td></tr>`;
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-slate-400 italic text-[11px]">Không có đồ hỏng nào được khai báo (hoàn hảo)</td></tr>`;
+    }
+    if (mobileContainer) {
+      mobileContainer.innerHTML = `<div class="p-3 text-center text-slate-400 italic text-xs bg-rose-50/20 border border-rose-100 rounded-xl">Không có đồ hỏng nào được khai báo (hoàn hảo)</div>`;
+    }
     return;
   }
 
-  tbody.innerHTML = state.tab4BrokenItems.map((b, idx) => {
-    const stats = getTab4ItemStats(b.name);
-    const photos = b.photos || [];
-    const photoCount = photos.length;
-    const isPhotoMatch = (photoCount === b.qty);
+  // 1. Desktop Table
+  if (tbody) {
+    tbody.innerHTML = state.tab4BrokenItems.map((b, idx) => {
+      const stats = getTab4ItemStats(b.name);
+      const photos = b.photos || [];
+      const photoCount = photos.length;
+      const isPhotoMatch = (photoCount === b.qty);
 
-    return `
-      <tr class="hover:bg-rose-50/50 transition border-b border-rose-100 ${stats.isOver ? 'bg-rose-100/40' : ''}">
-        <td class="py-2 px-3">
-          <select onchange="updateTab4BrokenItemName(${idx}, this.value)" class="w-full p-1.5 border border-rose-300 rounded text-xs bg-white font-medium">
-            ${state.tab4ReturnChecklist.map(r => `<option value="${r.name}" ${r.name === b.name ? 'selected' : ''}>${r.name}</option>`).join("")}
-          </select>
-          ${stats.isOver ? `<div class="text-[10px] text-rose-600 font-bold mt-0.5">⚠️ Vượt quá SL mang đi: Tốt (${stats.good}) + Hỏng (${stats.broken}) = ${stats.totalReported} > Mang đi (${stats.dispatched})!</div>` : ''}
-        </td>
-        <td class="py-2 px-2 text-center">
-          <input type="number" min="1" value="${b.qty}" onchange="updateTab4BrokenItemQty(${idx}, this.value)" class="w-14 p-1 border border-rose-300 rounded text-center font-bold text-rose-700 bg-white">
-        </td>
-        <td class="py-2 px-3">
-          <input type="text" value="${b.shelf || ''}" onchange="state.tab4BrokenItems[${idx}].shelf = this.value" placeholder="Khu vực đồ hỏng..." class="w-full p-1 border border-rose-200 rounded text-xs bg-white">
-        </td>
-        <td class="py-2 px-3">
-          <input type="text" value="${b.reason || ''}" onchange="state.tab4BrokenItems[${idx}].reason = this.value" placeholder="Rách bạt, gãy motor, sờn dây..." class="w-full p-1 border border-rose-200 rounded text-xs bg-white">
-        </td>
-        <td class="py-2 px-3">
-          <!-- Photo Actions & Status -->
-          <div class="flex items-center gap-1.5 justify-center mb-1">
-            <button type="button" onclick="openLiveCameraForBrokenItem('${b.id}')" class="px-2 py-1 text-[10px] font-bold rounded border border-rose-300 bg-white hover:bg-rose-100 text-rose-700 flex items-center gap-1" title="Chụp ảnh bằng camera">
-              <i data-lucide="camera" class="w-3 h-3"></i>
-              <span>Chụp</span>
+      return `
+        <tr class="hover:bg-rose-50/50 transition border-b border-rose-100 ${stats.isOver ? 'bg-rose-100/40' : ''}">
+          <td class="py-2 px-3">
+            <select onchange="updateTab4BrokenItemName(${idx}, this.value)" class="w-full p-1.5 border border-rose-300 rounded text-xs bg-white font-medium">
+              ${state.tab4ReturnChecklist.map(r => `<option value="${escapeHtml(r.name)}" ${r.name === b.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join("")}
+            </select>
+            ${stats.isOver ? `<div class="text-[10px] text-rose-600 font-bold mt-0.5">⚠️ Vượt quá SL mang đi: Tốt (${stats.good}) + Hỏng (${stats.broken}) = ${stats.totalReported} > Mang đi (${stats.dispatched})!</div>` : ''}
+          </td>
+          <td class="py-2 px-2 text-center">
+            <input type="number" min="1" value="${b.qty}" onchange="updateTab4BrokenItemQty(${idx}, this.value)" class="w-14 p-1 border border-rose-300 rounded text-center font-bold text-rose-700 bg-white">
+          </td>
+          <td class="py-2 px-3">
+            <input type="text" value="${escapeHtml(b.shelf || '')}" onchange="state.tab4BrokenItems[${idx}].shelf = this.value" placeholder="Khu vực đồ hỏng..." class="w-full p-1 border border-rose-200 rounded text-xs bg-white">
+          </td>
+          <td class="py-2 px-3">
+            <input type="text" value="${escapeHtml(b.reason || '')}" onchange="state.tab4BrokenItems[${idx}].reason = this.value" placeholder="Rách bạt, gãy motor, sờn dây..." class="w-full p-1 border border-rose-200 rounded text-xs bg-white">
+          </td>
+          <td class="py-2 px-3">
+            <!-- Photo Actions & Status (Chỉ chụp ảnh trực tiếp bằng camera) -->
+            <div class="flex items-center gap-1.5 justify-center mb-1">
+              <button type="button" onclick="openLiveCameraForBrokenItem('${b.id}')" class="px-2 py-1 text-[10px] font-bold rounded border border-rose-300 bg-white hover:bg-rose-100 text-rose-700 flex items-center gap-1 cursor-pointer" title="Chụp ảnh bằng camera">
+                <i data-lucide="camera" class="w-3 h-3"></i>
+                <span>Chụp</span>
+              </button>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold ${isPhotoMatch ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-200 text-rose-900'}">
+                ${photoCount}/${b.qty} ảnh
+              </span>
+            </div>
+
+            <!-- Thumbnails with Delete button -->
+            <div class="flex flex-wrap gap-1 justify-center">
+              ${photos.map((pUrl, pIdx) => `
+                <div class="relative w-8 h-8 rounded border border-rose-300 overflow-hidden bg-slate-100 shrink-0">
+                  <img src="${pUrl}" class="w-full h-full object-cover">
+                  <button type="button" onclick="removeBrokenPhoto('${b.id}', ${pIdx})" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white p-0.5 rounded-full cursor-pointer" title="Xóa ảnh này">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
+                </div>
+              `).join("")}
+            </div>
+            ${!isPhotoMatch ? `<div class="text-[9px] text-center text-rose-600 font-semibold mt-0.5">Yêu cầu đúng ${b.qty} ảnh</div>` : ''}
+          </td>
+          <td class="py-2 px-2 text-center">
+            <button onclick="removeTab4BrokenRow('${b.id}')" class="text-rose-500 hover:text-rose-700 p-1 cursor-pointer" title="Xóa dòng đồ hỏng">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
-            <label class="px-2 py-1 text-[10px] font-bold rounded border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 flex items-center gap-1 cursor-pointer" title="Chọn file ảnh từ máy">
-              <i data-lucide="upload" class="w-3 h-3"></i>
-              <span>File</span>
-              <input type="file" accept="image/*" class="hidden" onchange="uploadBrokenPhotoFile(event, '${b.id}')">
-            </label>
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold ${isPhotoMatch ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-200 text-rose-900'}">
-              ${photoCount}/${b.qty} ảnh
-            </span>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  // 2. Mobile Cards (Thông tin khai báo đồ hỏng cũng hiển thị dạng thẻ như bảng kiểm kê hoàn trả)
+  if (mobileContainer) {
+    mobileContainer.innerHTML = state.tab4BrokenItems.map((b, idx) => {
+      const stats = getTab4ItemStats(b.name);
+      const photos = b.photos || [];
+      const photoCount = photos.length;
+      const isPhotoMatch = (photoCount === b.qty);
+
+      return `
+        <div class="p-3 bg-white rounded-xl border ${stats.isOver ? 'border-rose-400 bg-rose-50/20' : 'border-rose-200'} shadow-2xs space-y-2.5 text-xs">
+          <!-- Row 1: Header + Item Name Select + Delete button -->
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-[10px] font-bold text-rose-800 uppercase mb-1">Món hỏng #${idx + 1}:</label>
+              <select onchange="updateTab4BrokenItemName(${idx}, this.value)" class="w-full p-2 border border-rose-300 rounded-lg text-xs bg-white font-semibold text-slate-900 focus:ring-1 focus:ring-rose-400">
+                ${state.tab4ReturnChecklist.map(r => `<option value="${escapeHtml(r.name)}" ${r.name === b.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join("")}
+              </select>
+              ${stats.isOver ? `<div class="text-[10px] text-rose-600 font-bold mt-1">⚠️ Vượt quá SL mang đi: Tốt (${stats.good}) + Hỏng (${stats.broken}) = ${stats.totalReported} > Mang đi (${stats.dispatched})!</div>` : ''}
+            </div>
+            <button type="button" onclick="removeTab4BrokenRow('${b.id}')" class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition shrink-0 mt-5 cursor-pointer" title="Xóa dòng này">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
           </div>
 
-          <!-- Thumbnails with Delete button -->
-          <div class="flex flex-wrap gap-1 justify-center">
-            ${photos.map((pUrl, pIdx) => `
-              <div class="relative w-8 h-8 rounded border border-rose-300 overflow-hidden bg-slate-100 shrink-0">
-                <img src="${pUrl}" class="w-full h-full object-cover">
-                <button type="button" onclick="removeBrokenPhoto('${b.id}', ${pIdx})" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white p-0.5 rounded-full" title="Xóa ảnh này">
-                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-              </div>
-            `).join("")}
+          <!-- Row 2: SL Hỏng & Vị trí lưu đồ hỏng -->
+          <div class="grid grid-cols-2 gap-2 bg-rose-50/50 p-2 rounded-lg border border-rose-100">
+            <div>
+              <label class="block text-[10px] font-bold text-rose-800 uppercase mb-0.5">SL Hỏng:</label>
+              <input type="number" min="1" value="${b.qty}" onchange="updateTab4BrokenItemQty(${idx}, this.value)" class="w-full min-h-[34px] px-2 py-1 border border-rose-300 rounded-lg text-center font-black text-rose-900 text-sm bg-white focus:ring-1 focus:ring-rose-500">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Vị trí lưu đồ hỏng:</label>
+              <input type="text" value="${escapeHtml(b.shelf || '')}" onchange="state.tab4BrokenItems[${idx}].shelf = this.value" placeholder="Khu vực đồ hỏng..." class="w-full min-h-[34px] px-2 py-1 border border-rose-200 rounded-lg text-xs font-semibold text-slate-900 bg-white focus:ring-1 focus:ring-rose-400">
+            </div>
           </div>
-          ${!isPhotoMatch ? `<div class="text-[9px] text-center text-rose-600 font-semibold mt-0.5">Yêu cầu đúng ${b.qty} ảnh</div>` : ''}
-        </td>
-        <td class="py-2 px-2 text-center">
-          <button onclick="removeTab4BrokenRow('${b.id}')" class="text-rose-500 hover:text-rose-700 p-1" title="Xóa dòng đồ hỏng">
-            <i data-lucide="trash-2" class="w-4 h-4"></i>
-          </button>
-        </td>
-      </tr>
-    `;
-  }).join("");
+
+          <!-- Row 3: Mô tả hư hại -->
+          <div>
+            <label class="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">Mô tả sự cố / hư hại:</label>
+            <input type="text" value="${escapeHtml(b.reason || '')}" onchange="state.tab4BrokenItems[${idx}].reason = this.value" placeholder="Rách bạt, sờn mép, gãy van hơi..." class="w-full min-h-[34px] px-2.5 py-1 border border-rose-200 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-1 focus:ring-rose-400">
+          </div>
+
+          <!-- Row 4: Ảnh hiện trạng đồ hỏng (Bắt buộc = SL Hỏng) -->
+          <div class="pt-1.5 border-t border-rose-100 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold text-rose-900 uppercase">Ảnh hiện trạng:</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${isPhotoMatch ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-200 text-rose-900'}">
+                ${photoCount} / ${b.qty} ảnh ${isPhotoMatch ? '✓' : '(Thiếu)'}
+              </span>
+            </div>
+
+            <div>
+              <button type="button" onclick="openLiveCameraForBrokenItem('${b.id}')" class="w-full py-2 px-3 text-xs font-bold rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-800 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer" title="Bật camera chụp đồ hỏng">
+                <i data-lucide="camera" class="w-4 h-4 text-rose-600"></i>
+                <span>📸 Bật Máy Ảnh Chụp Đồ Hỏng (Bắt buộc)</span>
+              </button>
+            </div>
+
+            <!-- Thumbnails -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              ${photos.map((pUrl, pIdx) => `
+                <div class="relative w-12 h-12 rounded-lg border border-rose-300 overflow-hidden bg-slate-100 shrink-0 shadow-2xs">
+                  <img src="${pUrl}" class="w-full h-full object-cover">
+                  <button type="button" onclick="removeBrokenPhoto('${b.id}', ${pIdx})" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full shadow-xs cursor-pointer" title="Xóa ảnh này">
+                    <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                  </button>
+                </div>
+              `).join("")}
+            </div>
+            ${!isPhotoMatch ? `<div class="text-[10px] text-rose-600 font-semibold italic">Yêu cầu chụp đủ đúng ${b.qty} ảnh cho ${b.qty} món hỏng.</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
 
   if (window.lucide) lucide.createIcons();
 }
@@ -3273,7 +3717,7 @@ function submitTab4ReturnSlip() {
   const unloadImg = document.querySelector("#tab4-unload-photo-preview img")?.src;
   const unloadHidden = document.getElementById("tab4-unload-photo-preview")?.classList.contains("hidden");
   if (!unloadImg || unloadHidden) {
-    alert("Bắt buộc phải chụp hoặc tải ảnh dỡ xe về kho trước khi hoàn tất phiếu thu hồi!");
+    alert("Bắt buộc phải chụp ảnh dỡ xe về kho trước khi hoàn tất phiếu thu hồi!");
     if (submitBtn) submitBtn.disabled = false;
     return;
   }
@@ -3282,7 +3726,7 @@ function submitTab4ReturnSlip() {
   for (let b of state.tab4BrokenItems) {
     const pCount = (b.photos || []).length;
     if (pCount !== b.qty) {
-      alert(`BẮT BUỘC ĐỦ ẢNH:\nĐạo cụ hỏng [${b.name}] khai báo ${b.qty} món hỏng nhưng hiện tại chỉ có ${pCount} ảnh!\n\nQuy tắc hệ thống: Số ảnh phải bằng đúng số đồ hỏng (mỗi món hỏng 1 ảnh hiện trạng). Vui lòng chụp hoặc tải thêm ảnh.`);
+      alert(`BẮT BUỘC ĐỦ ẢNH:\nĐạo cụ hỏng [${b.name}] khai báo ${b.qty} món hỏng nhưng hiện tại chỉ có ${pCount} ảnh!\n\nQuy tắc hệ thống: Số ảnh phải bằng đúng số đồ hỏng (mỗi món hỏng 1 ảnh hiện trạng). Vui lòng dùng máy ảnh chụp thêm ảnh.`);
       if (submitBtn) submitBtn.disabled = false;
       return;
     }
@@ -3338,6 +3782,10 @@ function submitTab4ReturnSlip() {
 
   state.tours = state.tours.filter(t => t.id !== tour.id);
 
+  const targetWhId = document.getElementById("tab4-warehouse")?.value || tour.warehouseId || "WH-MD";
+  const targetWh = state.warehouses.find(w => w.id === targetWhId) || state.warehouses[0];
+  const targetWhName = targetWh ? targetWh.name : "Kho Tổng Mỹ Đình (Hà Nội)";
+
   const nkCode = `NK_${formatDate(new Date(), 'YYYYMMDD')}_${Math.floor(10 + Math.random() * 90)}`;
   const doc = {
     id: `DOC-${Date.now()}`,
@@ -3346,7 +3794,8 @@ function submitTab4ReturnSlip() {
     badgeColor: "emerald",
     tourName: tour.name,
     location: tour.location,
-    warehouseName: "Kho Tổng Mỹ Đình (Hà Nội)",
+    warehouseId: targetWh ? targetWh.id : "WH-MD",
+    warehouseName: targetWhName,
     creator: state.currentUser.name,
     creatorAvatar: state.currentUser.avatar,
     createdAt: formatDateTime(new Date()),
@@ -3366,6 +3815,12 @@ function submitTab4ReturnSlip() {
   notifyWarehouseKeeper(doc);
   state.documents.unshift(doc);
 
+  // Nếu đang xử lý phiếu hậu kiểm, xóa phiếu khỏi danh sách hậu kiểm
+  if (state.activePostCheckingSlipId) {
+    state.postCheckSlips = (state.postCheckSlips || []).filter(s => s.id !== state.activePostCheckingSlipId);
+    state.activePostCheckingSlipId = null;
+  }
+
   saveState();
   state.tab4TourSelected = null;
   state.tab4ReturnChecklist = [];
@@ -3379,6 +3834,444 @@ function submitTab4ReturnSlip() {
   showToast(`Đã hoàn tất thu hồi đạo cụ [${nkCode}]!`, "success");
   if (typeof confetti === "function") confetti();
   switchTab(1);
+}
+
+// =========================================================================
+// TAB 4: HẬU KIỂM ĐẠO CỤ (LƯU KHO HẬU KIỂM & KIỂM ĐẾM SẮP XẾP LẠI SAU)
+// =========================================================================
+function submitTab4PostCheckSlip() {
+  if (!state.tab4TourSelected) {
+    alert("Vui lòng chọn Chương trình cần thu hồi để lưu kho hậu kiểm!");
+    return;
+  }
+
+  // Bắt buộc có ảnh chụp đồ tập kết tại khu vực hậu kiểm
+  const unloadImg = document.querySelector("#tab4-unload-photo-preview img")?.src;
+  const unloadHidden = document.getElementById("tab4-unload-photo-preview")?.classList.contains("hidden");
+  if (!unloadImg || unloadHidden) {
+    alert("BẮT BUỘC CÓ ẢNH CHỤP ĐỒ TẬP KẾT TẠI KHU VỰC HẬU KIỂM!\n\nNhân sự chuyển đồ về kho cần chụp ảnh hiện trạng toàn bộ đồ đã dỡ và tập kết tại khu vực hậu kiểm trước khi lưu.");
+    return;
+  }
+
+  const tour = state.tab4TourSelected;
+  const hkCode = `HK_${formatDate(new Date(), 'YYYYMMDD')}_${Math.floor(10 + Math.random() * 90)}`;
+  
+  // Xây dựng danh sách đồ cần hậu kiểm từ checklist hoặc props của tour
+  const items = (state.tab4ReturnChecklist && state.tab4ReturnChecklist.length > 0)
+    ? state.tab4ReturnChecklist.map((r, idx) => {
+        const invItem = state.items.find(i => (r.itemId && i.id === r.itemId) || i.name.toLowerCase() === r.name.toLowerCase());
+        const defaultShelf = (invItem && invItem.shelves && invItem.shelves[0]) ? invItem.shelves[0].shelf : "Giá A1 - Tầng 1";
+        return {
+          id: r.itemId || (invItem ? invItem.id : `ITEM-${idx}`),
+          name: r.name,
+          unit: r.unit,
+          qty: r.dispatchedQty || r.goodQty,
+          category: invItem ? invItem.category : "Đồ hơi",
+          type: invItem ? invItem.type : "Khấu hao",
+          shelf: "Khu vực Hậu kiểm",
+          tier: "Mặt sàn",
+          goodQty: r.dispatchedQty || r.goodQty,
+          brokenQty: 0,
+          targetShelf: defaultShelf,
+          note: ""
+        };
+      })
+    : (tour.props || []).map((p, idx) => {
+        const invItem = state.items.find(i => (p.itemId && i.id === p.itemId) || i.name.toLowerCase() === p.name.toLowerCase());
+        const defaultShelf = (invItem && invItem.shelves && invItem.shelves[0]) ? invItem.shelves[0].shelf : "Giá A1 - Tầng 1";
+        return {
+          id: p.itemId || (invItem ? invItem.id : `ITEM-${idx}`),
+          name: p.name,
+          unit: p.unit,
+          qty: p.qty,
+          category: invItem ? invItem.category : "Đồ hơi",
+          type: invItem ? invItem.type : "Khấu hao",
+          shelf: "Khu vực Hậu kiểm",
+          tier: "Mặt sàn",
+          goodQty: p.qty,
+          brokenQty: 0,
+          targetShelf: defaultShelf,
+          note: ""
+        };
+      });
+
+  // Cập nhật tồn kho: Giảm inUse vì đồ đã về kho (không còn ở chương trình nữa), đưa vào tạm tại "Khu vực Hậu kiểm"
+  items.forEach(it => {
+    const invItem = state.items.find(i => (it.id && i.id === it.id) || i.name.toLowerCase() === it.name.toLowerCase());
+    if (invItem) {
+      invItem.inUse = Math.max(0, (invItem.inUse || 0) - it.qty);
+      if (!invItem.shelves) invItem.shelves = [];
+      const hkShelf = invItem.shelves.find(s => s.shelf === "Khu vực Hậu kiểm");
+      if (hkShelf) {
+        hkShelf.qty = (hkShelf.qty || 0) + it.qty;
+      } else {
+        invItem.shelves.push({ shelf: "Khu vực Hậu kiểm", tier: "Mặt sàn", qty: it.qty });
+      }
+    }
+  });
+
+  const returnerName = tour.leader || (state.currentUser ? state.currentUser.name : "Nhân sự chuyển đồ");
+  const checkerName = state.currentUser ? state.currentUser.name : "Thủ kho";
+
+  const targetWhId = document.getElementById("tab4-warehouse")?.value || tour.warehouseId || "WH-MD";
+  const targetWh = state.warehouses.find(w => w.id === targetWhId) || state.warehouses[0];
+  const targetWhName = targetWh ? targetWh.name : "Kho Tổng Mỹ Đình (Hà Nội)";
+
+  // Tạo phiếu lưu kho hậu kiểm
+  const postCheckSlip = {
+    id: `HK-${Date.now()}`,
+    code: hkCode,
+    tourId: tour.id,
+    tourName: tour.name,
+    location: tour.location,
+    warehouseId: targetWh ? targetWh.id : "WH-MD",
+    warehouseName: targetWhName,
+    returnerName: returnerName,
+    returnerPhone: tour.phone || "",
+    returnerAvatar: state.users.find(u => u.name === tour.leader)?.avatar || "",
+    checkerName: checkerName,
+    checkerAvatar: state.currentUser ? state.currentUser.avatar : "",
+    createdAt: formatDateTime(new Date()),
+    photo: unloadImg,
+    status: "PENDING_INSPECTION",
+    totalItems: items.reduce((sum, i) => sum + i.qty, 0),
+    items: items,
+    note: "Đồ tập kết tại Khu vực Hậu kiểm. Nhân sự đã về kho, chờ kiểm đếm và phân bổ giá kệ sau."
+  };
+
+  if (!state.postCheckSlips) state.postCheckSlips = [];
+  state.postCheckSlips.unshift(postCheckSlip);
+
+  // Ghi nhận vào Chứng Từ (Tab 8)
+  const doc = {
+    id: `DOC-${Date.now()}`,
+    code: hkCode,
+    type: "Lưu kho hậu kiểm",
+    badgeColor: "amber",
+    tourName: tour.name,
+    location: tour.location,
+    warehouseId: targetWh ? targetWh.id : "WH-MD",
+    warehouseName: targetWhName,
+    creator: checkerName,
+    creatorAvatar: state.currentUser ? state.currentUser.avatar : "",
+    returner: returnerName,
+    checker: checkerName,
+    createdAt: formatDateTime(new Date()),
+    itemsCount: postCheckSlip.totalItems,
+    items: items.map(i => ({
+      name: i.name,
+      unit: i.unit,
+      qty: i.qty,
+      shelf: "Khu vực Hậu kiểm",
+      tier: "Mặt sàn",
+      location: "Khu vực Hậu kiểm - Mặt sàn"
+    })),
+    photos: [unloadImg],
+    note: `Lưu kho tập kết hậu kiểm. Người trả đồ: ${returnerName}, Người hậu kiểm: ${checkerName}.`
+  };
+  state.documents.unshift(doc);
+
+  // Xóa tour khỏi danh sách tour đang đi (vì đồ đã về kho)
+  state.tours = state.tours.filter(t => t.id !== tour.id);
+
+  saveState();
+
+  // Reset form Tab 4
+  state.tab4TourSelected = null;
+  state.tab4ReturnChecklist = [];
+  state.tab4BrokenItems = [];
+  removeUnloadPhoto();
+
+  const tourSel = document.getElementById("tab4-tour-select");
+  if (tourSel) tourSel.value = "";
+
+  renderTab4();
+  renderTab1InventoryTable();
+  renderTab8Documents();
+
+  showToast(`Đã lưu kho hậu kiểm thành công [${hkCode}]! Đồ đã tập kết tại Khu vực Hậu kiểm.`, "success");
+}
+
+function updateTab4Badge() {
+  const badge = document.getElementById("tab4-postcheck-count-badge");
+  if (!badge) return;
+  const pending = (state.postCheckSlips || []).filter(s => s.status === "PENDING_INSPECTION");
+  if (pending.length > 0) {
+    badge.textContent = pending.length;
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
+  }
+}
+
+function renderTab4PostCheckBanner() {
+  const container = document.getElementById("tab4-postcheck-banner");
+  if (!container) return;
+
+  const pending = (state.postCheckSlips || []).filter(s => s.status === "PENDING_INSPECTION");
+  if (pending.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="p-3.5 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/10 border-2 border-amber-400 rounded-2xl shadow-xs space-y-2.5">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2">
+          <span class="p-1.5 rounded-lg bg-amber-500 text-white font-bold text-xs shadow-2xs">
+            <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+          </span>
+          <div>
+            <div class="font-extrabold text-xs sm:text-sm text-amber-950 flex items-center gap-1.5 flex-wrap">
+              <span>DANH SÁCH ĐỒ CẦN HẬU KIỂM</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white">${pending.length} Phiếu</span>
+            </div>
+            <p class="text-[11px] text-amber-800">Đạo cụ đã tập kết tại khu vực hậu kiểm. Nhấn vào phiếu bên dưới để kiểm đếm, ghi nhận tình trạng và phân bổ về các giá kệ trong kho.</p>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+        ${pending.map(slip => `
+          <div onclick="loadTab4PostCheckSlip('${slip.id}')" class="p-3 bg-white rounded-xl border border-amber-300 shadow-2xs hover:border-amber-400 transition flex items-center justify-between gap-3 cursor-pointer group">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="font-black text-xs text-amber-900">${slip.code}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800 border border-amber-200">Chờ hậu kiểm</span>
+              </div>
+              <div class="font-bold text-xs text-slate-800 truncate mt-1">${slip.tourName}</div>
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500 mt-1">
+                <span>👤 Trả: <strong>${slip.returnerName || 'N/A'}</strong></span>
+                <span>🔍 Hậu kiểm: <strong>${slip.checkerName || (state.currentUser ? state.currentUser.name : 'Thủ kho')}</strong></span>
+                <span>📦 <strong>${slip.items ? slip.items.length : 0} mục (${slip.totalItems || (slip.items ? slip.items.reduce((s,i)=>s+i.qty,0) : 0)} món)</strong></span>
+              </div>
+            </div>
+            <button type="button" onclick="event.stopPropagation(); loadTab4PostCheckSlip('${slip.id}')" class="shrink-0 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1 cursor-pointer">
+              <i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i>
+              <span>Hậu Kiểm</span>
+            </button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function openPostCheckDetailModal(slipId) {
+  const slip = (state.postCheckSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+
+  const modal = document.getElementById("modal-post-check-detail");
+  if (!modal) return;
+
+  // Render slip info
+  const codeEl = document.getElementById("postcheck-modal-code");
+  if (codeEl) codeEl.textContent = slip.code;
+  const tourEl = document.getElementById("postcheck-modal-tour");
+  if (tourEl) tourEl.textContent = slip.tourName;
+  const locEl = document.getElementById("postcheck-modal-location");
+  if (locEl) locEl.textContent = slip.location || "Tại kho";
+  const dateEl = document.getElementById("postcheck-modal-date");
+  if (dateEl) dateEl.textContent = slip.createdAt;
+
+  // Returner info (mặc định người trả trước đó)
+  const returnerInput = document.getElementById("postcheck-modal-returner");
+  if (returnerInput) returnerInput.value = slip.returnerName || "";
+
+  // Checker info (người hậu kiểm thực hiện công tác này - mặc định người dùng hiện tại)
+  const checkerInput = document.getElementById("postcheck-modal-checker");
+  if (checkerInput) checkerInput.value = state.currentUser ? state.currentUser.name : (slip.checkerName || "Thủ kho");
+
+  // Photo
+  const photoEl = document.getElementById("postcheck-modal-photo");
+  if (photoEl) {
+    if (slip.photo) {
+      photoEl.src = slip.photo;
+      photoEl.parentElement.parentElement.classList.remove("hidden");
+    } else {
+      photoEl.parentElement.parentElement.classList.add("hidden");
+    }
+  }
+
+  // Render items table (đầy đủ thông tin như phiếu nhập kho)
+  const tbody = document.getElementById("postcheck-modal-items-tbody");
+  if (tbody) {
+    tbody.innerHTML = (slip.items || []).map((it, idx) => `
+      <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+        <td class="py-2.5 px-3 text-center text-slate-400 font-bold">${idx + 1}</td>
+        <td class="py-2.5 px-3">
+          <div class="font-bold text-slate-800">${it.name}</div>
+          <div class="text-[10px] text-slate-500">${it.category || 'Đạo cụ'} • <span class="text-sky-700 font-semibold">${it.type || 'Khấu hao'}</span></div>
+        </td>
+        <td class="py-2.5 px-2 text-center font-medium">${it.unit}</td>
+        <td class="py-2.5 px-2 text-center font-extrabold text-amber-700 bg-amber-50/50">${it.qty}</td>
+        <td class="py-2.5 px-2 text-center">
+          <input type="number" min="0" max="${it.qty}" value="${it.goodQty !== undefined ? it.goodQty : it.qty}" 
+            onchange="updatePostCheckRowStats('${slip.id}', ${idx}, this.value, 'good')" 
+            class="w-16 p-1 text-center font-bold text-emerald-700 bg-emerald-50 border border-emerald-300 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500">
+        </td>
+        <td class="py-2.5 px-2 text-center">
+          <input type="number" min="0" max="${it.qty}" value="${it.brokenQty || 0}" 
+            onchange="updatePostCheckRowStats('${slip.id}', ${idx}, this.value, 'broken')" 
+            class="w-16 p-1 text-center font-bold text-rose-700 bg-rose-50 border border-rose-300 rounded-lg text-xs focus:ring-1 focus:ring-rose-500">
+        </td>
+        <td class="py-2.5 px-3">
+          <input type="text" value="${it.targetShelf || 'Giá A1 - Tầng 1'}" 
+            placeholder="VD: Giá A1 - Tầng 1" 
+            onchange="updatePostCheckRowShelf('${slip.id}', ${idx}, this.value)"
+            class="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:ring-1 focus:ring-sky-500">
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  // Set action button
+  const finishBtn = document.getElementById("btn-finish-postcheck");
+  if (finishBtn) {
+    if (slip.status === "COMPLETED") {
+      finishBtn.classList.add("hidden");
+    } else {
+      finishBtn.classList.remove("hidden");
+      finishBtn.onclick = () => finishPostCheckSlip(slip.id);
+    }
+  }
+
+  modal.classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
+
+function updatePostCheckRowStats(slipId, itemIdx, val, field) {
+  const slip = (state.postCheckSlips || []).find(s => s.id === slipId);
+  if (!slip || !slip.items || !slip.items[itemIdx]) return;
+  const num = Math.max(0, parseInt(val, 10) || 0);
+  const it = slip.items[itemIdx];
+  if (field === "good") {
+    it.goodQty = Math.min(it.qty, num);
+    it.brokenQty = Math.max(0, it.qty - it.goodQty);
+  } else if (field === "broken") {
+    it.brokenQty = Math.min(it.qty, num);
+    it.goodQty = Math.max(0, it.qty - it.brokenQty);
+  }
+  openPostCheckDetailModal(slipId);
+}
+
+function updatePostCheckRowShelf(slipId, itemIdx, val) {
+  const slip = (state.postCheckSlips || []).find(s => s.id === slipId);
+  if (!slip || !slip.items || !slip.items[itemIdx]) return;
+  slip.items[itemIdx].targetShelf = val;
+}
+
+function finishPostCheckSlip(slipId) {
+  const slip = (state.postCheckSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+
+  const returnerName = document.getElementById("postcheck-modal-returner")?.value.trim() || slip.returnerName;
+  const checkerName = document.getElementById("postcheck-modal-checker")?.value.trim() || (state.currentUser ? state.currentUser.name : "Thủ kho");
+
+  // Kiểm tra số lượng
+  for (let it of slip.items) {
+    const good = Number(it.goodQty || 0);
+    const broken = Number(it.brokenQty || 0);
+    if (good + broken !== it.qty) {
+      alert(`Đạo cụ [${it.name}] có tổng Còn tốt (${good}) + Hỏng (${broken}) = ${good + broken}, không khớp với số lượng cần hậu kiểm (${it.qty})!\nVui lòng chỉnh sửa lại.`);
+      return;
+    }
+  }
+
+  // Cập nhật kho vĩnh viễn: Chuyển từ "Khu vực Hậu kiểm" sang các giá kệ chỉ định
+  slip.items.forEach(it => {
+    const invItem = state.items.find(i => (it.id && i.id === it.id) || i.name.toLowerCase() === it.name.toLowerCase());
+    if (invItem) {
+      // Trừ khỏi kệ tạm "Khu vực Hậu kiểm"
+      if (invItem.shelves) {
+        const hkShelf = invItem.shelves.find(s => s.shelf === "Khu vực Hậu kiểm");
+        if (hkShelf) {
+          hkShelf.qty = Math.max(0, (hkShelf.qty || 0) - it.qty);
+          if (hkShelf.qty === 0) {
+            invItem.shelves = invItem.shelves.filter(s => s.shelf !== "Khu vực Hậu kiểm");
+          }
+        }
+      }
+
+      // Cộng đồ còn tốt vào giá kệ chỉ định
+      const goodNum = Number(it.goodQty || 0);
+      if (goodNum > 0) {
+        invItem.ready = (invItem.ready || 0) + goodNum;
+        if (!invItem.shelves) invItem.shelves = [];
+        const destShelfName = it.targetShelf || "Kệ Kho Mỹ Đình - Tầng 1";
+        const existingShelf = invItem.shelves.find(s => s.shelf === destShelfName);
+        if (existingShelf) {
+          existingShelf.qty = (existingShelf.qty || 0) + goodNum;
+        } else {
+          invItem.shelves.push({ shelf: destShelfName, tier: "Tầng 1", qty: goodNum });
+        }
+      }
+
+      // Ghi nhận đồ hỏng nếu có
+      const brokenNum = Number(it.brokenQty || 0);
+      if (brokenNum > 0) {
+        invItem.broken = (invItem.broken || 0) + brokenNum;
+        if (!invItem.brokenLocations) invItem.brokenLocations = [];
+        invItem.brokenLocations.push({
+          shelf: "Khu vực Chờ Sửa Chữa",
+          qty: brokenNum,
+          reason: `Phát hiện hư hỏng sau hậu kiểm tour [${slip.tourName}]`,
+          photo: slip.photo || "",
+          photos: [slip.photo].filter(Boolean)
+        });
+      }
+    }
+  });
+
+  // Đánh dấu hoàn tất
+  slip.status = "COMPLETED";
+  slip.completedAt = formatDateTime(new Date());
+  slip.returnerName = returnerName;
+  slip.checkerName = checkerName;
+
+  // Tạo phiếu nhập kho chính thức (NK_...) trong chứng từ
+  const nkCode = `NK_${formatDate(new Date(), 'YYYYMMDD')}_${Math.floor(10 + Math.random() * 90)}`;
+  const doc = {
+    id: `DOC-${Date.now()}`,
+    code: nkCode,
+    type: "Nhập hoàn trả",
+    badgeColor: "emerald",
+    tourName: slip.tourName,
+    location: slip.location,
+    warehouseName: "Kho Tổng Mỹ Đình (Hà Nội)",
+    creator: checkerName,
+    creatorAvatar: state.currentUser ? state.currentUser.avatar : "",
+    returner: returnerName,
+    checker: checkerName,
+    createdAt: formatDateTime(new Date()),
+    itemsCount: slip.items.reduce((sum, i) => sum + (Number(i.goodQty) || 0), 0),
+    items: slip.items.map(i => ({
+      name: i.name,
+      unit: i.unit,
+      qty: Number(i.goodQty) || 0,
+      shelf: i.targetShelf || "Giá A1 - Tầng 1",
+      tier: "Tầng 1",
+      location: i.targetShelf || "Giá A1 - Tầng 1"
+    })),
+    photos: [slip.photo].filter(Boolean),
+    note: `Phiếu nhập kho chính thức sau hậu kiểm (Mã HK: ${slip.code}). Người trả đồ: ${returnerName}, Người hậu kiểm: ${checkerName}.`,
+    keeperApproved: true,
+    keeperName: checkerName,
+    keeperAvatar: state.currentUser ? state.currentUser.avatar : ""
+  };
+  state.documents.unshift(doc);
+
+  saveState();
+  closeModal("modal-post-check-detail");
+
+  renderTab4PostCheckBanner();
+  updateTab4Badge();
+  renderTab1InventoryTable();
+  renderTab8Documents();
+
+  showToast(`Đã hoàn tất hậu kiểm và nhập kho chính thức [${nkCode}]!`, "success");
+  if (typeof confetti === "function") confetti();
 }
 
 // Live WebRTC Camera Helpers
@@ -3853,7 +4746,7 @@ function renderItemDetailModal(itemId) {
       topEditText.textContent = "💾 Lưu Thay Đổi";
     } else {
       topEditBtn.className = "px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition";
-      topEditText.textContent = "✏️ Sửa Thông Tin";
+      topEditText.textContent = "Sửa Thông Tin";
     }
   }
 
@@ -4075,7 +4968,7 @@ function renderItemDetailModal(itemId) {
       ${!isItemDetailEditing ? `
         <button type="button" onclick="toggleItemDetailEditMode('${item.id}', true)" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow flex items-center gap-1.5 text-xs">
           <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
-          <span>✏️ Sửa Thông Tin Đạo Cụ</span>
+          <span>Sửa Thông Tin</span>
         </button>
         <button type="button" onclick="closeModal('modal-item-detail')" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl transition text-xs">
           Đóng
@@ -4298,15 +5191,9 @@ function renderTab5ReceiptChecklist(tour) {
   if (tour.receivedAndChecked === true) {
     container.innerHTML = `
       <div class="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2 mb-3 shadow-2xs">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="font-extrabold text-xs sm:text-sm text-emerald-900">✓ Đã kiểm đếm nhận đủ đồ tại hiện trường (Đang chạy)</span>
-          </div>
-          <button type="button" onclick="recheckTourReceipt('${tour.id}')" class="px-2.5 py-1 text-[11px] font-bold bg-white text-emerald-800 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition shadow-2xs flex items-center gap-1">
-            <i data-lucide="refresh-cw" class="w-3 h-3"></i>
-            <span>Kiểm đếm lại</span>
-          </button>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="font-extrabold text-xs sm:text-sm text-emerald-900">✓ Đã kiểm đếm nhận đủ đồ tại hiện trường (Đang chạy)</span>
         </div>
         <div class="text-[11px] text-emerald-700 flex flex-wrap items-center gap-3">
           <span>Người nhận phụ trách: <strong>${tour.leader}</strong> (${tour.phone})</span>
@@ -4343,7 +5230,7 @@ function renderTab5ReceiptChecklist(tour) {
           <thead class="bg-amber-100/70 text-slate-700 border-b border-amber-200 font-bold">
             <tr>
               <th class="py-2 px-1 text-center w-7">Đủ</th>
-              <th class="py-2 px-2">Tên Đạo Cụ</th>
+              <th class="py-2 px-2">Đạo Cụ</th>
               <th class="py-2 px-1 text-center w-8 sm:w-11 text-[10px] sm:text-xs">ĐVT</th>
               <th class="py-2 px-1 text-center w-10 sm:w-12 text-[10px] sm:text-xs">SL Gửi</th>
               <th class="py-2 px-1 text-center w-12 sm:w-14 text-[10px] sm:text-xs">SL Nhận</th>
@@ -4723,6 +5610,12 @@ function openFieldTransferModal() {
 }
 
 function addTransferDestination() {
+  const isMobile = window.innerWidth < 768;
+  if (isMobile && transferDestinations.length >= 2) {
+    alert("Trên điện thoại chỉ hỗ trợ điều chuyển tối đa đến 2 chương trình cùng lúc để đảm bảo hiển thị vừa vặn màn hình!");
+    return;
+  }
+
   const sourceTour = state.tours.find(t => t.id === state.selectedTourIdTab5);
   const otherTours = state.tours.filter(t => t.id !== sourceTour.id && (t.status === "Đang vận hành" || t.status === "Đang chạy"));
 
@@ -4915,6 +5808,16 @@ function renderTransferModalUI() {
     }).join("");
   }
 
+  const addBtn = document.querySelector("button[onclick='addTransferDestination()']");
+  if (addBtn) {
+    const isMobile = window.innerWidth < 768;
+    if (isMobile && transferDestinations.length >= 2) {
+      addBtn.classList.add("hidden");
+    } else {
+      addBtn.classList.remove("hidden");
+    }
+  }
+
   renderTransferTable();
   if (window.lucide) lucide.createIcons();
 }
@@ -4971,6 +5874,18 @@ function transferAll100Percent() {
   showToast("Đã chọn chuyển 100% đạo cụ sang Nơi nhận 1!", "info");
 }
 
+function stepComboSetsTransfer(comboId, destId, delta, maxSets) {
+  const current = Number(comboTransferSets[comboId]?.[destId] || 0);
+  const next = Math.max(0, Math.min(maxSets, current + delta));
+  updateComboSetsTransfer(comboId, destId, next);
+}
+
+function stepTransferQty(propName, destTourId, delta, maxQty) {
+  const current = Number(transferAllocations[propName]?.[destTourId] || 0);
+  const next = Math.max(0, Math.min(maxQty, current + delta));
+  updateTransferQty(propName, destTourId, next);
+}
+
 function renderTransferTable() {
   const table = document.getElementById("transfer-main-table");
   if (!table) return;
@@ -4978,23 +5893,31 @@ function renderTransferTable() {
   const sourceTour = state.tours.find(t => t.id === state.selectedTourIdTab5);
   if (!sourceTour) return;
 
+  const destCount = transferDestinations.length;
+  // Riêng giao diện điện thoại: tên đồ chiếm 50% (1/2), bỏ cột đang giữ, số nơi nhận tối đa 2
+  // Không cuộn ngang (nguyên tắc chỉ kéo xuống, không kéo sang ngang), chữ tự xuống dòng
+  const nameWidth = "w-1/2 md:w-auto";
+  const curHoldWidth = "hidden md:table-cell md:w-16";
+  const destWidth = (destCount === 1) ? "w-[32%] md:w-20" : "w-[24%] md:w-18";
+  const remainWidth = (destCount === 1) ? "w-[18%] md:w-16" : "w-[14%] md:w-14";
+
   let theadHtml = `
     <thead class="sticky top-0 z-20 shadow-2xs">
-      <tr class="bg-slate-100 border-b border-slate-300 font-bold text-slate-800 text-[11px]">
-        <th class="py-2 px-2 text-left sticky top-0 bg-slate-100 border-b border-slate-300">Tên Đồ / Bộ Game</th>
-        <th class="py-2 px-1 text-center w-14 sm:w-16 sticky top-0 bg-slate-100 border-b border-slate-300">Đang Giữ</th>
+      <tr class="bg-slate-100 border-b border-slate-300 font-bold text-slate-800 text-[10px] sm:text-[11px]">
+        <th class="py-1.5 px-1.5 text-left sticky top-0 bg-slate-100 border-b border-slate-300 ${nameWidth}">Tên Đồ / Game</th>
+        <th class="py-1.5 px-1 text-center sticky top-0 bg-slate-100 border-b border-slate-300 ${curHoldWidth}">Đang Giữ</th>
         ${transferDestinations.map((dId, dIdx) => {
           const isNew = String(dId).startsWith("__NEW");
           const t = state.tours.find(tour => tour.id === dId);
           const dName = isNew ? (transferNewTourData[dIdx]?.name || `Nơi nhận ${dIdx + 1}`) : (t ? t.name : `Nơi nhận ${dIdx + 1}`);
           return `
-            <th class="py-2 px-1 text-center w-16 sm:w-20 sticky top-0 bg-purple-100 text-purple-900 border-b border-purple-200">
-              <div>Sang #${dIdx + 1}</div>
-              <div class="text-[9px] font-normal text-purple-700 truncate max-w-[70px] sm:max-w-[90px] mx-auto">${escapeHtml(dName)}</div>
+            <th class="py-1.5 px-0.5 text-center sticky top-0 bg-purple-100 text-purple-900 border-b border-purple-200 ${destWidth}">
+              <div class="leading-tight text-[10px] sm:text-xs font-bold">Sang #${dIdx + 1}</div>
+              <div class="text-[8px] sm:text-[9px] font-normal text-purple-700 whitespace-normal break-words max-w-[65px] sm:max-w-[90px] mx-auto leading-tight" title="${escapeHtml(dName)}">${escapeHtml(dName)}</div>
             </th>
           `;
         }).join("")}
-        <th class="py-2 px-1 text-center w-14 sm:w-16 sticky top-0 bg-slate-100 border-b border-slate-300">Còn Lại</th>
+        <th class="py-1.5 px-0.5 text-center sticky top-0 bg-slate-100 border-b border-slate-300 ${remainWidth}">Còn Lại</th>
       </tr>
     </thead>
   `;
@@ -5016,7 +5939,7 @@ function renderTransferTable() {
     }
   });
 
-  // Render Combos with Collapse & Direct "Số Bộ" Input (Bỏ STT, bỏ ĐVT, vừa khít 1 màn hình)
+  // Render Combos with Collapse & Direct Stepper Buttons
   for (const [cId, group] of Object.entries(comboGroups)) {
     const isCollapsed = !!collapsedTransferCombos[cId];
 
@@ -5045,33 +5968,40 @@ function renderTransferTable() {
     // Header row of the Combo
     tbodyHtml += `
       <tr class="bg-amber-100/80 border-b border-amber-200 font-bold text-amber-950 text-xs">
-        <td class="py-2 px-2 cursor-pointer select-none" onclick="toggleCollapseTransferCombo('${cId}')">
-          <div class="flex items-center gap-1">
-            <button type="button" class="p-0.5 text-amber-800 hover:text-amber-950 shrink-0">
+        <td class="py-1.5 px-1.5 cursor-pointer select-none ${nameWidth}" onclick="toggleCollapseTransferCombo('${cId}')">
+          <div class="flex items-start gap-1">
+            <button type="button" class="p-0.5 text-amber-800 hover:text-amber-950 shrink-0 mt-0.5">
               <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-3.5 h-3.5"></i>
             </button>
-            <div class="min-w-0">
-              <span class="font-extrabold text-amber-950 text-xs truncate block">📦 ${group.name}</span>
-              <span class="text-[9px] text-amber-700 font-medium">(${group.items.length} món - ${isCollapsed ? 'Bấm mở' : 'Bấm ẩn'})</span>
+            <div class="min-w-0 flex-1">
+              <span class="font-extrabold text-amber-950 text-[10px] sm:text-xs whitespace-normal break-words block leading-snug" title="${escapeHtml(group.name)}">📦 ${escapeHtml(group.name)}</span>
+              <span class="text-[8px] sm:text-[9px] text-amber-700 font-medium block leading-tight">(${group.items.length} món • Có ${availableSets} bộ)</span>
             </div>
           </div>
         </td>
-        <td class="py-2 px-1 text-center">
-          <span class="px-1.5 py-0.5 rounded bg-amber-200 text-amber-950 font-black text-xs shadow-2xs">${availableSets} Bộ</span>
+        <td class="py-1.5 px-1 text-center ${curHoldWidth}">
+          <span class="px-1 py-0.2 rounded bg-amber-200 text-amber-950 font-black text-[10px] sm:text-xs">${availableSets}<span class="hidden sm:inline"> Bộ</span></span>
         </td>
         ${transferDestinations.map(dId => {
           const setsVal = comboTransferSets[cId]?.[dId] || 0;
           return `
-            <td class="py-2 px-1 text-center bg-purple-100/50">
-              <div class="flex items-center justify-center gap-0.5">
-                <input type="number" min="0" max="${availableSets}" value="${setsVal}" onchange="updateComboSetsTransfer('${cId}', '${dId}', this.value)" class="w-10 sm:w-12 p-1 text-center font-bold text-purple-900 bg-white border border-purple-400 rounded text-xs shadow-2xs" title="Chỉnh số lượng bộ chuyển">
-                <span class="font-bold text-[10px] text-purple-900 hidden sm:inline">Bộ</span>
+            <td class="py-1 px-0.5 text-center bg-purple-100/50 ${destWidth}">
+              <div class="inline-flex items-stretch border ${remainingSets < 0 ? 'border-rose-400 bg-rose-50' : 'border-purple-300 bg-white'} rounded-md overflow-hidden shadow-2xs">
+                <input type="number" min="0" max="${availableSets}" value="${setsVal}" onchange="updateComboSetsTransfer('${cId}', '${dId}', this.value)" class="w-6 sm:w-10 p-0.5 text-center font-black text-purple-900 bg-transparent text-[10px] sm:text-xs focus:outline-none select-all">
+                <div class="flex flex-col border-l border-purple-200 bg-purple-50/60">
+                  <button type="button" onclick="stepComboSetsTransfer('${cId}', '${dId}', 1, ${availableSets})" class="px-1 py-0.2 hover:bg-purple-200 text-purple-700 active:bg-purple-300 leading-none flex items-center justify-center cursor-pointer" title="Tăng">
+                    <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg>
+                  </button>
+                  <button type="button" onclick="stepComboSetsTransfer('${cId}', '${dId}', -1, ${availableSets})" class="px-1 py-0.2 hover:bg-purple-200 text-purple-700 active:bg-purple-300 leading-none border-t border-purple-200 flex items-center justify-center cursor-pointer" title="Giảm">
+                    <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                  </button>
+                </div>
               </div>
             </td>
           `;
         }).join("")}
-        <td class="py-2 px-1 text-center font-black ${remainingSets < 0 ? 'text-rose-600 bg-rose-100/60' : 'text-amber-950'}">
-          ${remainingSets} Bộ
+        <td class="py-1 px-0.5 text-center font-black text-[10px] sm:text-xs ${remainWidth} ${remainingSets < 0 ? 'text-rose-600 bg-rose-100/60' : 'text-amber-950'}">
+          ${remainingSets}<span class="hidden sm:inline"> Bộ</span>
         </td>
       </tr>
     `;
@@ -5089,22 +6019,34 @@ function renderTransferTable() {
 
         tbodyHtml += `
           <tr class="hover:bg-amber-50/40 border-b border-amber-100/80 text-xs ${remaining < 0 ? 'bg-rose-50/70' : ''}">
-            <td class="py-1.5 px-2 pl-5 font-medium text-slate-800 text-xs">
-              <div class="flex items-center gap-1">
-                <span class="text-slate-400 mr-0.5 shrink-0">↳</span>
-                <span class="truncate">${p.name}</span>
+            <td class="py-1 px-1.5 pl-3 font-medium text-slate-800 ${nameWidth}">
+              <div class="flex items-start gap-1">
+                <span class="text-slate-400 shrink-0 text-[8px] mt-0.5">↳</span>
+                <span class="whitespace-normal break-words block text-[10px] sm:text-xs leading-snug" title="${escapeHtml(p.name)}">
+                  ${escapeHtml(p.name)} <span class="text-slate-400 font-normal md:hidden">(Có ${p.qty})</span>
+                </span>
               </div>
             </td>
-            <td class="py-1.5 px-1 text-center font-semibold text-slate-700 text-xs">${p.qty}</td>
+            <td class="py-1 px-1 text-center font-semibold text-slate-700 text-[10px] sm:text-xs ${curHoldWidth}">${p.qty}</td>
             ${transferDestinations.map(dId => {
               const val = alloc[dId] || 0;
               return `
-                <td class="py-1.5 px-1 text-center bg-purple-50/20">
-                  <input type="number" min="0" max="${p.qty}" value="${val}" onchange="updateTransferQty('${p.name}', '${dId}', this.value)" class="w-10 sm:w-12 p-1 border ${remaining < 0 ? 'border-rose-400 text-rose-700' : 'border-slate-300'} rounded text-center font-bold text-xs bg-white">
+                <td class="py-1 px-0.5 text-center bg-purple-50/20 ${destWidth}">
+                  <div class="inline-flex items-stretch border ${remaining < 0 ? 'border-rose-400 bg-rose-50' : 'border-slate-300 bg-white'} rounded-md overflow-hidden shadow-2xs">
+                    <input type="number" min="0" max="${p.qty}" value="${val}" onchange="updateTransferQty('${escapeHtml(p.name)}', '${dId}', this.value)" class="w-6 sm:w-10 p-0.5 text-center font-bold text-[10px] sm:text-xs text-slate-900 bg-transparent focus:outline-none select-all">
+                    <div class="flex flex-col border-l border-slate-200 bg-slate-50">
+                      <button type="button" onclick="stepTransferQty('${escapeHtml(p.name)}', '${dId}', 1, ${p.qty})" class="px-1 py-0.2 hover:bg-purple-100 text-purple-700 active:bg-purple-200 leading-none flex items-center justify-center cursor-pointer" title="Tăng">
+                        <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg>
+                      </button>
+                      <button type="button" onclick="stepTransferQty('${escapeHtml(p.name)}', '${dId}', -1, ${p.qty})" class="px-1 py-0.2 hover:bg-purple-100 text-purple-700 active:bg-purple-200 leading-none border-t border-slate-200 flex items-center justify-center cursor-pointer" title="Giảm">
+                        <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                      </button>
+                    </div>
+                  </div>
                 </td>
               `;
             }).join("")}
-            <td class="py-1.5 px-1 text-center font-bold text-xs ${remaining < 0 ? 'text-rose-600 bg-rose-100/50' : (remaining === 0 ? 'text-slate-400' : 'text-emerald-700')}">
+            <td class="py-1 px-0.5 text-center font-bold text-[10px] sm:text-xs ${remainWidth} ${remaining < 0 ? 'text-rose-600 bg-rose-100/50' : (remaining === 0 ? 'text-slate-400' : 'text-emerald-700')}">
               ${remaining}
             </td>
           </tr>
@@ -5117,7 +6059,7 @@ function renderTransferTable() {
   if (looseItems.length > 0) {
     tbodyHtml += `
       <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-800 text-xs">
-        <td colspan="${2 + transferDestinations.length + 1}" class="py-1.5 px-2">
+        <td colspan="10" class="py-1.5 px-2">
           🛠️ ĐỒ LẺ & THIẾT BỊ PHỤ TRỢ (${looseItems.length} món)
         </td>
       </tr>
@@ -5134,19 +6076,31 @@ function renderTransferTable() {
 
       tbodyHtml += `
         <tr class="hover:bg-slate-50 border-b border-slate-100 text-xs ${remaining < 0 ? 'bg-rose-50/70' : ''}">
-          <td class="py-1.5 px-2 font-medium text-slate-800 text-xs truncate">
-            ${p.name}
+          <td class="py-1 px-1.5 font-medium text-slate-800 ${nameWidth}">
+            <span class="whitespace-normal break-words block text-[10px] sm:text-xs leading-snug" title="${escapeHtml(p.name)}">
+              ${escapeHtml(p.name)} <span class="text-slate-400 font-normal md:hidden">(Có ${p.qty})</span>
+            </span>
           </td>
-          <td class="py-1.5 px-1 text-center font-bold text-slate-700 text-xs">${p.qty}</td>
+          <td class="py-1 px-1 text-center font-bold text-slate-700 text-[10px] sm:text-xs ${curHoldWidth}">${p.qty}</td>
           ${transferDestinations.map(dId => {
             const val = alloc[dId] || 0;
             return `
-              <td class="py-1.5 px-1 text-center bg-purple-50/20">
-                <input type="number" min="0" max="${p.qty}" value="${val}" onchange="updateTransferQty('${p.name}', '${dId}', this.value)" class="w-10 sm:w-12 p-1 border ${remaining < 0 ? 'border-rose-400 text-rose-700' : 'border-slate-300'} rounded text-center font-bold text-xs bg-white">
+              <td class="py-1 px-0.5 text-center bg-purple-50/20 ${destWidth}">
+                <div class="inline-flex items-stretch border ${remaining < 0 ? 'border-rose-400 bg-rose-50' : 'border-slate-300 bg-white'} rounded-md overflow-hidden shadow-2xs">
+                  <input type="number" min="0" max="${p.qty}" value="${val}" onchange="updateTransferQty('${escapeHtml(p.name)}', '${dId}', this.value)" class="w-6 sm:w-10 p-0.5 text-center font-bold text-[10px] sm:text-xs text-slate-900 bg-transparent focus:outline-none select-all">
+                  <div class="flex flex-col border-l border-slate-200 bg-slate-50">
+                    <button type="button" onclick="stepTransferQty('${escapeHtml(p.name)}', '${dId}', 1, ${p.qty})" class="px-1 py-0.2 hover:bg-purple-100 text-purple-700 active:bg-purple-200 leading-none flex items-center justify-center cursor-pointer" title="Tăng">
+                      <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"/></svg>
+                    </button>
+                    <button type="button" onclick="stepTransferQty('${escapeHtml(p.name)}', '${dId}', -1, ${p.qty})" class="px-1 py-0.2 hover:bg-purple-100 text-purple-700 active:bg-purple-200 leading-none border-t border-slate-200 flex items-center justify-center cursor-pointer" title="Giảm">
+                      <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                    </button>
+                  </div>
+                </div>
               </td>
             `;
           }).join("")}
-          <td class="py-1.5 px-1 text-center font-bold text-xs ${remaining < 0 ? 'text-rose-600 bg-rose-100/50' : (remaining === 0 ? 'text-slate-400' : 'text-emerald-700')}">
+          <td class="py-1 px-0.5 text-center font-bold text-[10px] sm:text-xs ${remainWidth} ${remaining < 0 ? 'text-rose-600 bg-rose-100/50' : (remaining === 0 ? 'text-slate-400' : 'text-emerald-700')}">
             ${remaining}
           </td>
         </tr>
@@ -5607,7 +6561,7 @@ function renderTab6PendingExternalBanner() {
           </div>
           <button onclick="openReceiveRepairedModal('${order.id}')" class="px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition flex items-center gap-1 shrink-0 shadow-xs">
             <i data-lucide="package-check" class="w-3.5 h-3.5"></i>
-            <span>Nghiệm thu & Nhập về kho</span>
+            <span>Nghiệm thu</span>
           </button>
         </div>
 
@@ -6277,14 +7231,14 @@ function openDocumentPrintModal(docId) {
         <div class="flex items-center gap-3">
           <img src="logo.png" alt="Logo ABA" class="h-12 w-auto object-contain">
           <div>
-            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">CÔNG TY CỔ PHẦN TỔ CHỨC SỰ KIỆN ABA</h2>
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">CÔNG TY CỔ PHẦN ĐÀO TẠO TƯ VẤN VÀ PHÁT TRIỂN ABA</h2>
             <p class="text-[10px] text-slate-500">Hệ thống Quản lý Đạo cụ & Vận hành Sự kiện</p>
           </div>
         </div>
       </div>
       <div class="text-right text-xs">
         <div class="font-extrabold text-sm text-slate-900">${doc.code}</div>
-        <div class="text-[11px] text-slate-500">Ngày lập: ${doc.createdAt}</div>
+        <div class="text-[11px] text-slate-500">Thời gian lập: ${doc.createdAt}</div>
       </div>
     </div>
 
@@ -6359,7 +7313,7 @@ function openDocumentPrintModal(docId) {
           ${creatorAvatar ? `<img src="${creatorAvatar}" alt="Ảnh người lập" class="w-14 h-14 rounded-full object-cover border border-slate-300 shadow-2xs">` : `<div class="h-16 w-full"></div>`}
         </div>
         <div class="h-6 flex items-center justify-center font-bold text-slate-800 text-xs">${doc.creator}</div>
-        <div class="h-5 flex items-center justify-center text-[10px] text-emerald-600 font-semibold">✓ Đã xác thực người lập</div>
+        <div class="h-5 flex items-center justify-center text-[10px] text-emerald-600 font-semibold">✓ Đã xác thực</div>
       </div>
 
       <!-- 2. THỦ KHO (Hiện tên & ảnh nếu đã xác nhận; nếu chưa thì để trống hoàn toàn để ký thật) -->
@@ -6588,6 +7542,7 @@ function handleAddWarehouse(event) {
 }
 
 function openEditWarehouseModal(whId) {
+  closeModal('modal-warehouse-mgmt');
   const wh = state.warehouses.find(w => w.id === whId);
   if (!wh) return;
 
@@ -6871,17 +7826,32 @@ function addComboChildInputRow(data = {}) {
   const unitVal = data.unit || "Chiếc";
 
   const div = document.createElement("div");
-  div.className = "flex items-center gap-1.5 combo-child-row";
+  div.className = "flex items-center gap-1.5 combo-child-row bg-white/95 p-1 rounded-lg border border-slate-200 shadow-2xs";
   div.innerHTML = `
-    <input type="text" list="combo-item-datalist" value="${escapeHtml(nameVal)}" placeholder="Tên món con (gợi ý tự động)..." onchange="onComboChildNameChange(this)" class="flex-1 p-1.5 bg-white border border-slate-200 rounded text-xs child-name focus:ring-1 focus:ring-amber-500 focus:outline-none" required>
-    <input type="number" min="1" value="${qtyVal}" placeholder="SL" class="w-16 p-1.5 bg-white border border-slate-200 rounded text-xs text-center font-bold child-qty focus:ring-1 focus:ring-amber-500 focus:outline-none" required title="Số lượng mỗi bộ">
-    <input type="text" value="${escapeHtml(unitVal)}" placeholder="ĐVT" class="w-16 p-1.5 bg-white border border-slate-200 rounded text-xs text-center child-unit focus:ring-1 focus:ring-amber-500 focus:outline-none" required title="Đơn vị tính">
-    <button type="button" onclick="this.closest('.combo-child-row').remove()" class="text-slate-400 hover:text-rose-500 p-1.5 rounded hover:bg-rose-50 transition shrink-0" title="Xóa món này">
-      <i data-lucide="trash-2" class="w-4 h-4"></i>
+    <div class="flex-1 min-w-0">
+      <input type="text" list="combo-item-datalist" value="${escapeHtml(nameVal)}" placeholder="Gõ tên để tìm đồ có sẵn..." onchange="onComboChildNameChange(this)" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs child-name focus:bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none font-medium text-slate-800" required>
+    </div>
+    <div class="w-14 sm:w-16 shrink-0">
+      <input type="number" min="1" value="${qtyVal}" placeholder="SL" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-center font-bold child-qty focus:bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none text-slate-900" required title="Số lượng mỗi bộ">
+    </div>
+    <div class="w-14 sm:w-16 shrink-0">
+      <input type="text" value="${escapeHtml(unitVal)}" placeholder="ĐVT" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-center child-unit focus:bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none text-slate-700" required title="Đơn vị tính (Chiếc, Bộ, Cuộn...)">
+    </div>
+    <button type="button" onclick="removeComboChildRow(this)" class="text-slate-400 hover:text-rose-500 p-1.5 rounded hover:bg-rose-50 transition shrink-0 cursor-pointer" title="Xóa món này">
+      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
     </button>
   `;
   container.appendChild(div);
   if (window.lucide) lucide.createIcons();
+}
+
+function removeComboChildRow(btn) {
+  const row = btn.closest(".combo-child-row");
+  if (row) row.remove();
+  const container = document.getElementById("combo-items-inputs");
+  if (container && container.children.length === 0) {
+    addComboChildInputRow();
+  }
 }
 
 function onComboChildNameChange(inputEl) {
@@ -7081,7 +8051,7 @@ function handleSaveGameCombo(event) {
   }
 
   const childRows = document.querySelectorAll(".combo-child-row");
-  const items = [];
+  let items = [];
 
   childRows.forEach(row => {
     const cName = row.querySelector(".child-name")?.value.trim();
@@ -7098,16 +8068,14 @@ function handleSaveGameCombo(event) {
     }
   });
 
-  if (items.length === 0) {
-    alert("Vui lòng thêm ít nhất một món đạo cụ thành phần!");
-    return;
-  }
-
   const defaultCategory = category || (type === "TOOLSET" ? "Dụng cụ phụ trợ" : "Game tự chế");
 
   if (editingComboId) {
     const existingIndex = state.combos.findIndex(c => c.id === editingComboId);
     if (existingIndex !== -1) {
+      if (items.length === 0 && state.combos[existingIndex].items) {
+        items = state.combos[existingIndex].items;
+      }
       state.combos[existingIndex] = {
         ...state.combos[existingIndex],
         name: name,
@@ -7280,9 +8248,14 @@ function rejectKeeperDoc(notifId) {
 
 function toggleNotificationPanel() {
   const panel = document.getElementById("notification-panel");
+  const backdrop = document.getElementById("notification-backdrop");
   if (!panel) return;
-  panel.classList.toggle("hidden");
-  renderNotifications();
+  const isHidden = panel.classList.toggle("hidden");
+  if (backdrop) {
+    if (isHidden) backdrop.classList.add("hidden");
+    else backdrop.classList.remove("hidden");
+  }
+  if (!isHidden) renderNotifications();
 }
 
 function markAllNotificationsAsRead() {
@@ -7661,6 +8634,9 @@ function openAdminUserMgmtModal() {
     return;
   }
 
+  // Đóng modal thông tin tài khoản trước khi mở bảng quản trị
+  closeModal("modal-user-profile");
+
   renderAdminUserList();
   const modal = document.getElementById("modal-admin-user-mgmt");
   if (modal) modal.classList.remove("hidden");
@@ -7669,50 +8645,113 @@ function openAdminUserMgmtModal() {
 
 function renderAdminUserList() {
   const tbody = document.getElementById("admin-user-list-tbody");
+  const mobileCards = document.getElementById("admin-user-mobile-cards");
   const countEl = document.getElementById("admin-users-count");
-  if (!tbody) return;
+  if (!tbody && !mobileCards) return;
 
   const users = state.users || [];
   if (countEl) countEl.textContent = `${users.length} tài khoản`;
 
-  tbody.innerHTML = users.map(u => {
-    const isCurrent = (u.id === state.currentUser?.id);
-    const rt = u.roleType || (u.isAdmin ? "ADMIN" : "STAFF");
+  // 1. Desktop Table
+  if (tbody) {
+    tbody.innerHTML = users.map(u => {
+      const isCurrent = (u.id === state.currentUser?.id);
+      const rt = u.roleType || (u.isAdmin ? "ADMIN" : "STAFF");
 
-    return `
-      <tr class="hover:bg-slate-50 transition">
-        <td class="py-2.5 px-3 text-center">
-          <img src="${u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}" class="w-8 h-8 rounded-full object-cover mx-auto border border-slate-200 shadow-2xs">
-        </td>
-        <td class="py-2.5 px-3">
-          <div class="font-bold text-slate-800 text-xs">${u.name} ${isCurrent ? '<span class="text-[10px] text-sky-600 font-normal">(Bạn)</span>' : ''}</div>
-          <div class="text-[10px] text-slate-400">Đăng nhập cuối: ${u.lastLogin || 'Chưa'}</div>
-        </td>
-        <td class="py-2.5 px-2 font-mono text-xs text-slate-600 font-semibold">${u.phone}</td>
-        <td class="py-2.5 px-3">
-          <select onchange="changeUserRoleAdmin('${u.id}', this.value)" class="p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-sky-500">
-            <option value="STAFF" ${rt === 'STAFF' ? 'selected' : ''}>👤 Thông thường</option>
-            <option value="KEEPER" ${rt === 'KEEPER' ? 'selected' : ''}>⭐ Thủ kho</option>
-            <option value="ADMIN" ${rt === 'ADMIN' ? 'selected' : ''}>👑 Quản trị</option>
-          </select>
-        </td>
-        <td class="py-2.5 px-3 bg-amber-50/50">
-          <span class="px-2 py-1 bg-amber-100 border border-amber-300 rounded-md font-mono font-bold text-amber-900 text-xs tracking-wider inline-block">
-            ${u.password || u.phone}
-          </span>
-        </td>
-        <td class="py-2.5 px-2 text-center">
-          ${isCurrent ? `
-            <span class="text-slate-300 text-xs" title="Không thể xóa tài khoản hiện tại">-</span>
-          ` : `
-            <button type="button" onclick="deleteUserAdmin('${u.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition" title="Xóa tài khoản này">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          `}
-        </td>
-      </tr>
-    `;
-  }).join("");
+      return `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-2.5 px-3 text-center">
+            <img src="${u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}" class="w-8 h-8 rounded-full object-cover mx-auto border border-slate-200 shadow-2xs">
+          </td>
+          <td class="py-2.5 px-3">
+            <div class="font-bold text-slate-800 text-xs">${escapeHtml(u.name)} ${isCurrent ? '<span class="text-[10px] text-sky-600 font-normal">(Bạn)</span>' : ''}</div>
+            <div class="text-[10px] text-slate-400">Đăng nhập cuối: ${u.lastLogin || 'Chưa'}</div>
+          </td>
+          <td class="py-2.5 px-2 font-mono text-xs text-slate-600 font-semibold">${escapeHtml(u.phone)}</td>
+          <td class="py-2.5 px-3">
+            <select onchange="changeUserRoleAdmin('${u.id}', this.value)" class="p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-sky-500">
+              <option value="STAFF" ${rt === 'STAFF' ? 'selected' : ''}>👤 Thông thường</option>
+              <option value="KEEPER" ${rt === 'KEEPER' ? 'selected' : ''}>⭐ Thủ kho</option>
+              <option value="ADMIN" ${rt === 'ADMIN' ? 'selected' : ''}>👑 Quản trị</option>
+            </select>
+          </td>
+          <td class="py-2.5 px-3 bg-amber-50/50">
+            <span class="px-2 py-1 bg-amber-100 border border-amber-300 rounded-md font-mono font-bold text-amber-900 text-xs tracking-wider inline-block">
+              ${escapeHtml(u.password || u.phone)}
+            </span>
+          </td>
+          <td class="py-2.5 px-2 text-center">
+            ${isCurrent ? `
+              <span class="text-slate-300 text-xs" title="Không thể xóa tài khoản hiện tại">-</span>
+            ` : `
+              <button type="button" onclick="deleteUserAdmin('${u.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition" title="Xóa tài khoản này">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            `}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  // 2. Mobile Cards (Dạng thẻ để hiện đầy đủ thông tin mỗi tài khoản trên điện thoại)
+  if (mobileCards) {
+    mobileCards.innerHTML = users.map(u => {
+      const isCurrent = (u.id === state.currentUser?.id);
+      const rt = u.roleType || (u.isAdmin ? "ADMIN" : "STAFF");
+
+      return `
+        <div class="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs">
+          <!-- Row 1: Avatar, Name, Phone & Delete button -->
+          <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <img src="${u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}" class="w-10 h-10 rounded-full object-cover border-2 border-sky-400/40 shadow-xs shrink-0">
+              <div class="min-w-0">
+                <div class="font-bold text-slate-900 text-xs flex items-center gap-1">
+                  <span>${escapeHtml(u.name)}</span>
+                  ${isCurrent ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-100 text-sky-800 shrink-0">Bạn</span>' : ''}
+                </div>
+                <div class="text-[11px] font-mono text-slate-600 font-semibold mt-0.5">📞 ${escapeHtml(u.phone)}</div>
+              </div>
+            </div>
+            <div>
+              ${isCurrent ? `
+                <span class="text-slate-300 text-xs italic px-2 py-1">Đang dùng</span>
+              ` : `
+                <button type="button" onclick="deleteUserAdmin('${u.id}')" class="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition shrink-0 cursor-pointer" title="Xóa tài khoản này">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              `}
+            </div>
+          </div>
+
+          <!-- Row 2: Phân quyền & Mật khẩu -->
+          <div class="grid grid-cols-2 gap-2 bg-slate-50/70 p-2 rounded-lg border border-slate-200/60">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Phân quyền:</label>
+              <select onchange="changeUserRoleAdmin('${u.id}', this.value)" class="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-sky-500">
+                <option value="STAFF" ${rt === 'STAFF' ? 'selected' : ''}>👤 Thông thường</option>
+                <option value="KEEPER" ${rt === 'KEEPER' ? 'selected' : ''}>⭐ Thủ kho</option>
+                <option value="ADMIN" ${rt === 'ADMIN' ? 'selected' : ''}>👑 Quản trị</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-amber-800 uppercase mb-1">Mật khẩu:</label>
+              <div class="px-2 py-1.5 bg-amber-100/80 border border-amber-300 rounded-lg font-mono font-bold text-amber-950 text-xs text-center truncate select-all" title="Mật khẩu tài khoản">
+                ${escapeHtml(u.password || u.phone)}
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Ngày đăng nhập cuối -->
+          <div class="text-[10px] text-slate-400 flex items-center justify-between pt-0.5">
+            <span>🕒 Đăng nhập cuối:</span>
+            <span class="font-medium text-slate-600">${u.lastLogin || 'Chưa đăng nhập'}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
 
   if (window.lucide) lucide.createIcons();
 }
