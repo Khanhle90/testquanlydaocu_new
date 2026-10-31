@@ -164,7 +164,7 @@ function initState() {
   });
 
   state.gsheetConfig = loadFromStorage(STORAGE_KEYS.GSHEET_CONFIG, {
-    url: "https://script.google.com/macros/s/AKfycbz_aba_mock/exec",
+    url: "https://script.google.com/macros/s/AKfycbwpN4TEj5Ny0cyvNrpvL4s9kvz5uRJh6T8RJy8VAy-Cphwin6yzvH5kUAWUmSllkRRc1w/exec",
     isConnected: true,
     lastSync: new Date().toISOString()
   });
