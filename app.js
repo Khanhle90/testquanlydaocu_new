@@ -106,6 +106,11 @@ document.addEventListener("DOMContentLoaded", () => {
   initState();
   renderApp();
   initGlobalAutocompleteListeners();
+
+  // Tự động kéo dữ liệu mới nhất từ Google Sheet về máy khi mở app (Đồng bộ 2 chiều)
+  setTimeout(() => {
+    pullFromGoogleSheet(true);
+  }, 500);
 });
 
 function initState() {
@@ -225,10 +230,10 @@ function loadFromStorage(key, defaultValue) {
   }
 }
 
-function refreshData() {
-  initState();
+async function refreshData() {
+  showToast("Đang làm mới & đồng bộ 2 chiều với Google Sheet...", "info");
+  await pullFromGoogleSheet(false);
   renderApp();
-  showToast("Đã làm mới dữ liệu hệ thống thành công!", "success");
 }
 
 function renderApp() {
@@ -7548,7 +7553,7 @@ function handleAddWarehouse(event) {
 
   state.warehouses.push(newWh);
   saveState();
-  syncToGoogleSheet("ADD_DOC", doc);
+  syncToGoogleSheet("UPDATE_WAREHOUSES", newWh, { warehouses: state.warehouses });
   event.target.reset();
   clearNewWhMapPhoto();
   renderWarehouseList();
@@ -7614,6 +7619,7 @@ function saveEditedWarehouse() {
   wh.mapImage = mapImage;
 
   saveState();
+  syncToGoogleSheet("UPDATE_WAREHOUSES", wh, { warehouses: state.warehouses });
   closeModal("modal-edit-warehouse");
   renderWarehouseList();
   showToast(`Đã cập nhật thông tin kho [${wh.name}] thành công!`, "success");
@@ -7647,6 +7653,7 @@ function handleDeleteWarehouse(whId) {
 
   state.warehouses = state.warehouses.filter(w => w.id !== whId);
   saveState();
+  syncToGoogleSheet("UPDATE_WAREHOUSES", null, { warehouses: state.warehouses });
   renderWarehouseList();
   populateCommonDropdowns();
   renderTab1();
@@ -8134,7 +8141,7 @@ function handleDeleteGameCombo(comboId) {
 }
 
 // =========================================================================
-// GOOGLE SHEETS & REALTIME CLOUD SYNC ENGINE
+// GOOGLE SHEETS & REALTIME CLOUD SYNC ENGINE (2-WAY BIDIRECTIONAL SYNC)
 // =========================================================================
 
 /**
@@ -8142,21 +8149,20 @@ function handleDeleteGameCombo(comboId) {
  * Hỗ trợ POST không bị chặn CORS bằng mode no-cors / text/plain
  */
 async function syncToGoogleSheet(action, payload, extraData = {}) {
-  const webhookUrl = state.gsheetConfig?.url;
-  if (!webhookUrl || !state.gsheetConfig?.isConnected) {
-    return;
-  }
+  const webhookUrl = state.gsheetConfig?.url || DEFAULT_GSHEET_WEBHOOK_URL;
+  if (!webhookUrl) return;
 
   try {
     const postBody = {
-      action: action, // "ADD_DOC", "UPDATE_ITEMS", "SYNC_ALL"
+      action: action, // "ADD_DOC", "UPDATE_ITEMS", "UPDATE_WAREHOUSES", "SYNC_ALL"
       payload: payload,
       items: state.items || [],
+      warehouses: state.warehouses || [],
+      documents: state.documents || [],
       ...extraData,
       timestamp: new Date().toISOString()
     };
 
-    // Google Apps Script Web App yêu cầu payload dạng JSON String
     await fetch(webhookUrl, {
       method: "POST",
       headers: {
@@ -8167,6 +8173,7 @@ async function syncToGoogleSheet(action, payload, extraData = {}) {
     });
 
     state.gsheetConfig.lastSync = new Date().toISOString();
+    state.gsheetConfig.isConnected = true;
     localStorage.setItem(STORAGE_KEYS.GSHEET_CONFIG, JSON.stringify(state.gsheetConfig));
     renderGSheetStatus();
   } catch (err) {
@@ -8174,16 +8181,105 @@ async function syncToGoogleSheet(action, payload, extraData = {}) {
   }
 }
 
+/**
+ * Tải dữ liệu từ Google Sheets về Web App (Đồng bộ 2 chiều)
+ */
+async function pullFromGoogleSheet(silent = false) {
+  const webhookUrl = state.gsheetConfig?.url || DEFAULT_GSHEET_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  if (!silent) showToast("Đang đồng bộ dữ liệu từ Google Sheet...", "info");
+
+  try {
+    const res = await fetch(webhookUrl + "?action=getAll");
+    if (!res.ok) return;
+    const result = await res.json();
+
+    if (result.status === "success" && result.data) {
+      let changed = false;
+
+      // 1. Cập nhật danh sách kho từ Google Sheet
+      if (Array.isArray(result.data.warehouses) && result.data.warehouses.length > 0) {
+        const parsedWhs = result.data.warehouses.map(w => {
+          if (w["Dữ Liệu Chi Tiết (JSON)"]) {
+            try { return JSON.parse(w["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
+          }
+          return {
+            id: w["Mã Kho"] || `WH-${Date.now()}`,
+            code: w["Mã Kho"] || "",
+            name: w["Tên Kho Bãi"] || "",
+            address: w["Địa Chỉ"] || "",
+            manager: w["Thủ Kho Quản Lý"] || "",
+            isDefault: w["Kho Mặc Định"] === "Có",
+            mapImage: w["Ảnh Sơ Đồ"] || ""
+          };
+        }).filter(w => w.name);
+
+        if (parsedWhs.length > 0) {
+          state.warehouses = parsedWhs;
+          changed = true;
+        }
+      }
+
+      // 2. Cập nhật danh sách đạo cụ từ Google Sheet
+      if (Array.isArray(result.data.items) && result.data.items.length > 0) {
+        const parsedItems = result.data.items.map(it => {
+          if (it["Dữ Liệu Chi Tiết (JSON)"]) {
+            try { return JSON.parse(it["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
+          }
+
+          const ready = Number(it["Sẵn Sàng"]) || 0;
+          const inUse = Number(it["Đang Đi Tour"]) || 0;
+          const broken = Number(it["Đang Hỏng"]) || 0;
+          const total = Number(it["Tổng Tồn"]) || (ready + inUse + broken);
+
+          return {
+            id: it["Mã Đạo Cụ"] || `ITEM-${Date.now()}`,
+            code: it["Mã Đạo Cụ"] || "",
+            name: it["Tên Đạo Cụ"] || "",
+            type: it["Danh Mục"] === "Đồ hơi" ? "Khấu hao" : "Khấu hao",
+            category: it["Danh Mục"] || "Đồ sự kiện",
+            purpose: it["Mục Đích Sử Dụng"] || "",
+            warehouseName: it["Kho Quản Lý"] || "",
+            warehouseId: (state.warehouses.find(w => w.name === it["Kho Quản Lý"]) || {}).id || "WH-MD",
+            unit: it["Đơn Vị Tính"] || "cái",
+            total: total,
+            ready: ready,
+            inUse: inUse,
+            broken: broken,
+            price: Number(it["Đơn Giá (VNĐ)"]) || 0,
+            image: it["URL Ảnh"] || "",
+            shelves: []
+          };
+        }).filter(it => it.name);
+
+        if (parsedItems.length > 0) {
+          state.items = parsedItems;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        saveState();
+        renderApp();
+        if (!silent) showToast("🟢 Đã tải và đồng bộ dữ liệu mới nhất từ Google Sheet!", "success");
+      }
+    }
+  } catch (err) {
+    console.warn("Không thể tải từ Google Sheet:", err);
+  }
+}
+
 function openGSheetModal() {
   const urlInput = document.getElementById("gsheet-webhook-url");
-  if (urlInput) urlInput.value = state.gsheetConfig.url || "";
+  if (urlInput) urlInput.value = state.gsheetConfig.url || DEFAULT_GSHEET_WEBHOOK_URL;
   const modal = document.getElementById("modal-gsheet");
   if (modal) modal.classList.remove("hidden");
   if (window.lucide) lucide.createIcons();
 }
 
 function saveGSheetConfig() {
-  const url = document.getElementById("gsheet-webhook-url")?.value.trim();
+  const url = document.getElementById("gsheet-webhook-url")?.value.trim() || DEFAULT_GSHEET_WEBHOOK_URL;
   state.gsheetConfig.url = url;
   state.gsheetConfig.isConnected = !!url;
   saveState();
@@ -8191,17 +8287,20 @@ function saveGSheetConfig() {
   closeModal("modal-gsheet");
   showToast("Đã lưu cấu hình kết nối Google Sheet!", "success");
 
-  // Nếu có link, tự động kích hoạt đồng bộ toàn bộ tồn kho lên sheet
   if (url) {
     triggerFullGSheetSync();
   }
 }
 
 async function triggerFullGSheetSync() {
-  showToast("Đang đồng bộ dữ liệu tồn kho lên Google Sheet...", "info");
+  showToast("Đang đồng bộ toàn bộ Đạo cụ & Kho bãi lên Google Sheet...", "info");
   try {
-    await syncToGoogleSheet("UPDATE_ITEMS", state.items);
-    showToast("🟢 Đã gửi toàn bộ dữ liệu tồn kho lên Google Sheet!", "success");
+    await syncToGoogleSheet("SYNC_ALL", null, {
+      items: state.items || [],
+      warehouses: state.warehouses || [],
+      documents: state.documents || []
+    });
+    showToast("🟢 Đã gửi toàn bộ dữ liệu lên Google Sheet thành công!", "success");
   } catch (e) {
     showToast("⚠️ Có lỗi khi gửi dữ liệu lên Google Sheet", "error");
   }
@@ -8237,9 +8336,13 @@ async function testGSheetConnection() {
 
 function copyAppsScriptCode() {
   const code = `/**
- * GOOGLE APPS SCRIPT CHO HỆ THỐNG QUẢN LÝ ĐẠO CỤ ABA
- * Bảng tính: Quản lý đạo cụ Final
+ * =========================================================================
+ * GOOGLE APPS SCRIPT CHO HỆ THỐNG QUẢN LÝ ĐẠO CỤ & KHO BÃI ABA
+ * Bảng tính đích: Quản lý đạo cụ Final
+ * ID Bảng tính: 1zuu2b1XtkwFweNQfXJ9_K3oQw_AXsJkuAzeIGXYSms0
+ * =========================================================================
  */
+
 var SPREADSHEET_ID = "1zuu2b1XtkwFweNQfXJ9_K3oQw_AXsJkuAzeIGXYSms0";
 
 function getSpreadsheet() {
@@ -8252,61 +8355,204 @@ function getSpreadsheet() {
 
 function doGet(e) {
   var ss = getSpreadsheet();
-  var itemsSheet = ss.getSheetByName("ITEMS") || ss.getSheets()[0];
-  var items = itemsSheet.getDataRange().getValues();
-  return ContentService.createTextOutput(JSON.stringify({ status: "success", items: items }))
-    .setMimeType(ContentService.MimeType.JSON);
+  var itemsSheet = getOrCreateSheet(ss, "ITEMS", getItemsHeaders());
+  var docsSheet = getOrCreateSheet(ss, "DOCUMENTS", getDocsHeaders());
+  var whSheet = getOrCreateSheet(ss, "WAREHOUSES", getWarehousesHeaders());
+  var toursSheet = getOrCreateSheet(ss, "TOURS", getToursHeaders());
+
+  return responseJson({
+    status: "success",
+    timestamp: new Date().toISOString(),
+    data: {
+      items: getSheetDataAsJson(itemsSheet),
+      documents: getSheetDataAsJson(docsSheet),
+      warehouses: getSheetDataAsJson(whSheet),
+      tours: getSheetDataAsJson(toursSheet)
+    }
+  });
 }
 
 function doPost(e) {
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return responseJson({ status: "error", message: "Không có dữ liệu gửi lên" });
+    }
+
     var data = JSON.parse(e.postData.contents);
     var ss = getSpreadsheet();
 
     // 1. Lưu phiếu vào sheet DOCUMENTS
-    if (data.action === "ADD_DOC" || data.sheet === "DOCUMENTS") {
-      var docSheet = getOrCreateSheet(ss, "DOCUMENTS", [
-        "Mã Phiếu", "Loại Phiếu", "Ngày Tạo", "Người Lập", "Kho", "Tour/Dự Án", "Tổng Món", "Trạng Thái", "Thủ Kho", "Ghi Chú"
-      ]);
-      var d = data.payload || {};
+    if (data.payload && data.payload.code) {
+      var docSheet = getOrCreateSheet(ss, "DOCUMENTS", getDocsHeaders());
+      var d = data.payload;
       docSheet.appendRow([
-        d.code || d.id || "", d.type || "", d.createdAt || new Date().toLocaleString("vi-VN"),
-        d.creator || "", d.warehouseName || "", d.tourName || "",
-        d.itemsCount || 0, d.status || "Hoàn thành", d.keeperApproved ? "Đã duyệt" : "Chờ duyệt", d.note || ""
+        d.code || d.id || "",
+        d.type || "",
+        d.createdAt || new Date().toLocaleString("vi-VN"),
+        d.creator || "",
+        d.warehouseName || "",
+        d.tourName || "",
+        d.itemsCount || 0,
+        d.status || "Hoàn thành",
+        d.keeperApproved ? "Đã duyệt" : "Chờ duyệt",
+        d.note || "",
+        JSON.stringify(d)
       ]);
     }
 
-    // 2. Cập nhật tồn kho sheet ITEMS
+    // 2. Cập nhật danh sách đạo cụ vào sheet ITEMS
     if (data.items && Array.isArray(data.items)) {
-      var itemsSheet = getOrCreateSheet(ss, "ITEMS", [
-        "Mã Đạo Cụ", "Tên Đạo Cụ", "Danh Mục", "Mục Đích Sử Dụng", "Kho Quản Lý", "Vị Trí Kệ", "Đơn Vị Tính", "Tổng Tồn", "Sẵn Sàng", "Đang Đi Tour", "Đang Hỏng", "Đơn Giá (VNĐ)", "URL Ảnh"
-      ]);
-      var lastRow = itemsSheet.getLastRow();
-      if (lastRow > 1) {
-        itemsSheet.getRange(2, 1, lastRow - 1, 13).clearContent();
-      }
-      var rows = data.items.map(function(it) {
-        var shelfStr = Array.isArray(it.shelves) ? it.shelves.map(function(s){return s.shelf+" ("+s.qty+")";}).join("; ") : (it.shelfLocation || "");
-        var total = Number(it.total) || (Number(it.ready||0) + Number(it.inUse||0) + Number(it.broken||0));
-        return [
-          it.code || it.id || "", it.name || "", it.category || "", it.purpose || "",
-          it.warehouseName || it.warehouseId || "", shelfStr, it.unit || "", total,
-          Number(it.ready)||0, Number(it.inUse)||0, Number(it.broken)||0, Number(it.price||it.invoiceCost)||0, it.image || ""
-        ];
-      });
-      if (rows.length > 0) {
-        itemsSheet.getRange(2, 1, rows.length, 13).setValues(rows);
-      }
+      syncItemsToSheet(ss, data.items);
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
+    // 3. Cập nhật danh sách kho vào sheet WAREHOUSES
+    if (data.warehouses && Array.isArray(data.warehouses)) {
+      syncWarehousesToSheet(ss, data.warehouses);
+    }
+
+    return responseJson({
+      status: "success",
+      message: "Đã đồng bộ thành công lên Google Sheets thời gian thực!"
+    });
   } catch(err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    return responseJson({ status: "error", message: err.toString() });
   }
+}
+
+function syncItemsToSheet(ss, items) {
+  var sheet = getOrCreateSheet(ss, "ITEMS", getItemsHeaders());
+  var headers = getItemsHeaders();
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  }
+
+  var rows = items.map(function(it) {
+    var shelfStr = "";
+    if (Array.isArray(it.shelves)) {
+      shelfStr = it.shelves.map(function(s) { 
+        return s.shelf + (s.tier ? (" - Tầng " + s.tier) : "") + ": " + (s.qty || 0); 
+      }).join("; ");
+    } else {
+      shelfStr = it.shelfLocation || "";
+    }
+
+    var ready = Number(it.ready) || 0;
+    var inUse = Number(it.inUse) || 0;
+    var broken = Number(it.broken) || 0;
+    var total = Number(it.total) || (ready + inUse + broken);
+
+    return [
+      it.code || it.id || "",
+      it.name || "",
+      it.category || "",
+      it.purpose || "",
+      it.warehouseName || it.warehouseId || "",
+      shelfStr,
+      it.unit || "",
+      total,
+      ready,
+      inUse,
+      broken,
+      Number(it.price || it.invoiceCost) || 0,
+      it.image || "",
+      JSON.stringify(it)
+    ];
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+}
+
+function syncWarehousesToSheet(ss, warehouses) {
+  var sheet = getOrCreateSheet(ss, "WAREHOUSES", getWarehousesHeaders());
+  var headers = getWarehousesHeaders();
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  }
+
+  var rows = warehouses.map(function(w) {
+    return [
+      w.code || w.id || "",
+      w.name || "",
+      w.address || "",
+      w.manager || "",
+      w.isDefault ? "Có" : "Không",
+      w.mapImage || "",
+      JSON.stringify(w)
+    ];
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+}
+
+function getItemsHeaders() {
+  return [
+    "Mã Đạo Cụ", "Tên Đạo Cụ", "Danh Mục", "Mục Đích Sử Dụng", 
+    "Kho Quản Lý", "Vị Trí Kệ", "Đơn Vị Tính", "Tổng Tồn", 
+    "Sẵn Sàng", "Đang Đi Tour", "Đang Hỏng", "Đơn Giá (VNĐ)", "URL Ảnh", "Dữ Liệu Chi Tiết (JSON)"
+  ];
+}
+
+function getDocsHeaders() {
+  return [
+    "Mã Phiếu", "Loại Phiếu", "Ngày Tạo", "Người Lập Phiếu", 
+    "Kho Xuất/Nhập", "Tour/Chương Trình", "Tổng Số Món", 
+    "Trạng Thái", "Thủ Kho Duyệt", "Ghi Chú", "Dữ Liệu Chi Tiết (JSON)"
+  ];
+}
+
+function getWarehousesHeaders() {
+  return [
+    "Mã Kho", "Tên Kho Bãi", "Địa Chỉ", "Thủ Kho Quản Lý", "Kho Mặc Định", "Ảnh Sơ Đồ", "Dữ Liệu Chi Tiết (JSON)"
+  ];
+}
+
+function getToursHeaders() {
+  return [
+    "Mã Tour", "Tên Chương Trình", "Khách Hàng / Đơn Vị", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Địa Điểm Tổ Chức", "Điều Hành Tour", "Trạng Thái"
+  ];
+}
+
+function getSheetDataAsJson(sheet) {
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= 1 || lastCol < 1) return [];
+
+  var data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  var headers = data[0];
+  var result = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      if (headers[j]) obj[headers[j]] = row[j];
+    }
+    result.push(obj);
+  }
+  return result;
 }
 
 function getOrCreateSheet(ss, name, headers) {
   var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    var sheets = ss.getSheets();
+    for (var i = 0; i < sheets.length; i++) {
+      if (sheets[i].getName().trim().toUpperCase() === name.toUpperCase()) {
+        sheet = sheets[i];
+        break;
+      }
+    }
+  }
+
   if (!sheet) {
     var firstSheet = ss.getSheets()[0];
     if (firstSheet && (firstSheet.getName() === "Trang tính 1" || firstSheet.getName() === "Sheet1")) {
@@ -8316,10 +8562,18 @@ function getOrCreateSheet(ss, name, headers) {
       sheet = ss.insertSheet(name);
     }
   }
-  if (sheet.getLastRow() === 0 && headers) {
+
+  if (sheet.getLastRow() === 0 && headers && headers.length > 0) {
     sheet.appendRow(headers);
+    var hRange = sheet.getRange(1, 1, 1, headers.length);
+    hRange.setFontWeight("bold").setBackground("#1e293b").setFontColor("#ffffff");
   }
   return sheet;
+}
+
+function responseJson(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }`;
 
   navigator.clipboard.writeText(code).then(() => {
