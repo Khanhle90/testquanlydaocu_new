@@ -5,7 +5,7 @@
 
 // ==================== GLOBAL CONSTANTS & API KEYS ====================
 const IMGBB_API_KEY = "9b4a10db15d694a88f3aa0d1ffbc0669";
-const ADMIN_PASSWORD_DEFAULT = "admin123";
+const ADMIN_PASSWORD_DEFAULT = "khanh8888";
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
