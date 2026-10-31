@@ -8309,12 +8309,13 @@ async function syncToGoogleSheet(action, payload, extraData = {}) {
 
   try {
     const postBody = {
-      action: action, // "ADD_DOC", "UPDATE_ITEMS", "UPDATE_WAREHOUSES", "SYNC_ALL"
+      action: action, // "ADD_DOC", "UPDATE_ITEMS", "UPDATE_WAREHOUSES", "SYNC_ALL", "UPDATE_USERS"
       payload: payload,
       items: state.items || [],
       warehouses: state.warehouses || [],
       documents: state.documents || [],
       tours: state.tours || [],
+      users: state.users || [],
       ...extraData,
       timestamp: new Date().toISOString()
     };
@@ -8454,10 +8455,53 @@ async function pullFromGoogleSheet(silent = false) {
         state.documents = parsedDocs;
       }
 
+      // 5. Cập nhật danh sách Người dùng từ Google Sheet (Đồng bộ tài khoản đa thiết bị)
+      if (Array.isArray(result.data.users)) {
+        if (result.data.users.length > 0) {
+          const parsedUsers = result.data.users.map(u => {
+            if (u["Dữ Liệu Chi Tiết (JSON)"]) {
+              try { return JSON.parse(u["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
+            }
+            const roleType = u["Mã Quyền"] || "STAFF";
+            return {
+              id: u["Mã Tài Khoản"] || `USR-${Date.now()}`,
+              name: u["Họ Và Tên"] || "",
+              phone: u["Số Điện Thoại"] || "",
+              password: u["Mật Khẩu"] || u["Số Điện Thoại"] || "",
+              role: u["Chức Vụ"] || "Nhân viên kho",
+              roleType: roleType,
+              roleBadge: roleType === "KEEPER" ? "Thủ kho" : (roleType === "ADMIN" ? "Quản trị" : "Thông thường"),
+              isAdmin: (u["Quản Trị Viên"] === "Có" || roleType === "ADMIN"),
+              avatar: u["Ảnh Đại Diện"] || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+              faceRegistered: u["Đã Đăng Ký Khuôn Mặt"] === "Đã đăng ký",
+              hasLoggedIn: u["Đã Đăng Nhập"] === "Đã đăng nhập",
+              device: u["Thiết Bị"] || "",
+              lastLogin: u["Đăng Nhập Lần Cuối"] || "Chưa đăng nhập"
+            };
+          }).filter(u => u.name && u.phone);
+
+          if (parsedUsers.length > 0) {
+            state.users = parsedUsers;
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(state.users));
+            if (state.currentUser) {
+              const currentUpdated = state.users.find(u => u.id === state.currentUser.id || u.phone === state.currentUser.phone);
+              if (currentUpdated) {
+                state.currentUser = currentUpdated;
+                localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(state.currentUser));
+                renderUserInfo();
+              }
+            }
+          }
+        } else if (state.users && state.users.length > 0) {
+          // Khi sheet USERS vừa được tạo và còn rỗng, tự động đẩy danh sách user hiện tại lên Sheet
+          syncToGoogleSheet("UPDATE_USERS", null, { users: state.users });
+        }
+      }
+
       saveState();
       renderApp();
       if (!silent) {
-        showToast(`🟢 Đồng bộ Google Sheet thành công! Có ${state.items.length} đạo cụ, ${state.warehouses.length} kho.`, "success");
+        showToast(`🟢 Đồng bộ Google Sheet thành công! Có ${state.items.length} đạo cụ, ${state.warehouses.length} kho, ${state.users.length} tài khoản.`, "success");
       }
     }
   } catch (err) {
@@ -8494,7 +8538,8 @@ async function triggerFullGSheetSync() {
       items: state.items || [],
       warehouses: state.warehouses || [],
       documents: state.documents || [],
-      tours: state.tours || []
+      tours: state.tours || [],
+      users: state.users || []
     });
     showToast("🟢 Đã gửi toàn bộ dữ liệu lên Google Sheet thành công!", "success");
   } catch (e) {
@@ -8564,25 +8609,41 @@ function getSpreadsheet() {
   }
 }
 
+/**
+ * Xử lý GET request: Tải toàn bộ dữ liệu từ Google Sheets về Web App
+ */
 function doGet(e) {
   var ss = getSpreadsheet();
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "getAll";
+
   var itemsSheet = getOrCreateSheet(ss, "ITEMS", getItemsHeaders());
   var docsSheet = getOrCreateSheet(ss, "DOCUMENTS", getDocsHeaders());
   var whSheet = getOrCreateSheet(ss, "WAREHOUSES", getWarehousesHeaders());
   var toursSheet = getOrCreateSheet(ss, "TOURS", getToursHeaders());
+  var usersSheet = getOrCreateSheet(ss, "USERS", getUsersHeaders());
+
+  var items = getSheetDataAsJson(itemsSheet);
+  var docs = getSheetDataAsJson(docsSheet);
+  var warehouses = getSheetDataAsJson(whSheet);
+  var tours = getSheetDataAsJson(toursSheet);
+  var users = getSheetDataAsJson(usersSheet);
 
   return responseJson({
     status: "success",
     timestamp: new Date().toISOString(),
     data: {
-      items: getSheetDataAsJson(itemsSheet),
-      documents: getSheetDataAsJson(docsSheet),
-      warehouses: getSheetDataAsJson(whSheet),
-      tours: getSheetDataAsJson(toursSheet)
+      items: items,
+      documents: docs,
+      warehouses: warehouses,
+      tours: tours,
+      users: users
     }
   });
 }
 
+/**
+ * Xử lý POST request: Ghi nhận và đồng bộ từ Web App lên Google Sheets
+ */
 function doPost(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) {
@@ -8591,24 +8652,27 @@ function doPost(e) {
 
     var data = JSON.parse(e.postData.contents);
     var ss = getSpreadsheet();
+    var action = data.action;
 
     // 1. Lưu phiếu vào sheet DOCUMENTS
-    if (data.payload && data.payload.code) {
-      var docSheet = getOrCreateSheet(ss, "DOCUMENTS", getDocsHeaders());
-      var d = data.payload;
-      docSheet.appendRow([
-        d.code || d.id || "",
-        d.type || "",
-        d.createdAt || new Date().toLocaleString("vi-VN"),
-        d.creator || "",
-        d.warehouseName || "",
-        d.tourName || "",
-        d.itemsCount || 0,
-        d.status || "Hoàn thành",
-        d.keeperApproved ? "Đã duyệt" : "Chờ duyệt",
-        d.note || "",
-        JSON.stringify(d)
-      ]);
+    if (action === "ADD_DOC" || data.sheet === "DOCUMENTS" || data.payload) {
+      if (data.payload && data.payload.code) {
+        var docSheet = getOrCreateSheet(ss, "DOCUMENTS", getDocsHeaders());
+        var d = data.payload;
+        docSheet.appendRow([
+          d.code || d.id || "",
+          d.type || "",
+          d.createdAt || new Date().toLocaleString("vi-VN"),
+          d.creator || "",
+          d.warehouseName || "",
+          d.tourName || "",
+          d.itemsCount || 0,
+          d.status || "Hoàn thành",
+          d.keeperApproved ? "Đã duyệt" : "Chờ duyệt",
+          d.note || "",
+          JSON.stringify(d)
+        ]);
+      }
     }
 
     // 2. Cập nhật danh sách đạo cụ vào sheet ITEMS
@@ -8619,6 +8683,16 @@ function doPost(e) {
     // 3. Cập nhật danh sách kho vào sheet WAREHOUSES
     if (data.warehouses && Array.isArray(data.warehouses)) {
       syncWarehousesToSheet(ss, data.warehouses);
+    }
+
+    // 4. Cập nhật danh sách Tour / Sự kiện vào sheet TOURS
+    if (data.tours && Array.isArray(data.tours)) {
+      syncToursToSheet(ss, data.tours);
+    }
+
+    // 5. Cập nhật danh sách tài khoản người dùng vào sheet USERS
+    if (data.users && Array.isArray(data.users)) {
+      syncUsersToSheet(ss, data.users);
     }
 
     return responseJson({
@@ -8703,6 +8777,76 @@ function syncWarehousesToSheet(ss, warehouses) {
   }
 }
 
+function syncToursToSheet(ss, tours) {
+  var sheet = getOrCreateSheet(ss, "TOURS", getToursHeaders());
+  var headers = getToursHeaders();
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  }
+
+  var rows = tours.map(function(t) {
+    var propsCount = t.totalItems || (t.props ? t.props.reduce(function(acc, p) { return acc + (Number(p.qty) || 0); }, 0) : 0);
+    return [
+      t.id || "",
+      t.name || "",
+      t.customer || t.location || "",
+      t.startDate || "",
+      t.endDate || "",
+      t.location || "",
+      t.leader ? (t.leader + " (" + (t.phone || "") + ")") : "",
+      t.status || "Đang vận hành",
+      propsCount,
+      JSON.stringify(t)
+    ];
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+}
+
+function syncUsersToSheet(ss, users) {
+  var sheet = getOrCreateSheet(ss, "USERS", getUsersHeaders());
+  var headers = getUsersHeaders();
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  }
+
+  var rows = users.map(function(u) {
+    return [
+      u.id || "",
+      u.name || "",
+      u.phone || "",
+      u.password || u.phone || "",
+      u.role || "",
+      u.roleType || "STAFF",
+      u.isAdmin ? "Có" : "Không",
+      u.avatar || "",
+      u.faceRegistered ? "Đã đăng ký" : "Chưa đăng ký",
+      u.hasLoggedIn ? "Đã đăng nhập" : "Chưa đăng nhập",
+      u.device || "",
+      u.lastLogin || "",
+      JSON.stringify(u)
+    ];
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+}
+
+function getUsersHeaders() {
+  return [
+    "Mã Tài Khoản", "Họ Và Tên", "Số Điện Thoại", "Mật Khẩu", 
+    "Chức Vụ", "Mã Quyền", "Quản Trị Viên", "Ảnh Đại Diện", 
+    "Đã Đăng Ký Khuôn Mặt", "Đã Đăng Nhập", "Thiết Bị", "Đăng Nhập Lần Cuối", "Dữ Liệu Chi Tiết (JSON)"
+  ];
+}
+
 function getItemsHeaders() {
   return [
     "Mã Đạo Cụ", "Tên Đạo Cụ", "Danh Mục", "Mục Đích Sử Dụng", 
@@ -8727,7 +8871,7 @@ function getWarehousesHeaders() {
 
 function getToursHeaders() {
   return [
-    "Mã Tour", "Tên Chương Trình", "Khách Hàng / Đơn Vị", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Địa Điểm Tổ Chức", "Điều Hành Tour", "Trạng Thái"
+    "Mã Tour", "Tên Chương Trình", "Khách Hàng / Đơn Vị", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Địa Điểm Tổ Chức", "Điều Hành Tour", "Trạng Thái", "Tổng Món Đang Giữ", "Dữ Liệu Chi Tiết (JSON)"
   ];
 }
 
@@ -9036,38 +9180,70 @@ function toggleLoginPasswordVisibility() {
   if (window.lucide) lucide.createIcons();
 }
 
-function handleUserLogin(event) {
+async function handleUserLogin(event) {
   event.preventDefault();
   const nameInput = document.getElementById("login-input-name")?.value.trim();
   const passInput = document.getElementById("login-input-password")?.value.trim();
 
   if (!nameInput || !passInput) {
-    alert("Vui lòng nhập đầy đủ Họ và tên và Mật khẩu!");
+    alert("Vui lòng nhập đầy đủ Họ và tên (hoặc Số điện thoại) và Mật khẩu!");
     return;
   }
 
-  // Find user by name (case-insensitive) or phone number
-  const user = (state.users || []).find(u => 
-    (u.name.toLowerCase() === nameInput.toLowerCase() || u.phone === nameInput) &&
-    (u.password === passInput || u.phone === passInput)
-  );
+  const normalizeStr = (str) => (str || "").trim().toLowerCase();
+
+  const matchUser = (u) => {
+    const uName = normalizeStr(u.name);
+    const uPhone = normalizeStr(u.phone);
+    const uId = normalizeStr(u.id);
+    const targetIdentifier = normalizeStr(nameInput);
+
+    // Cho phép đăng nhập bằng Họ tên HOẶC Số điện thoại HOẶC Mã tài khoản
+    const matchesIdentity = (uName === targetIdentifier || uPhone === targetIdentifier || uId === targetIdentifier);
+    if (!matchesIdentity) return false;
+
+    const userPass = (u.password !== undefined && u.password !== null && u.password !== "") ? String(u.password).trim() : String(u.phone || "").trim();
+    const userPhone = String(u.phone || "").trim();
+    const inputPass = String(passInput).trim();
+
+    return (userPass === inputPass || userPhone === inputPass);
+  };
+
+  // 1. Kiểm tra tài khoản trong bộ nhớ cục bộ
+  let user = (state.users || []).find(matchUser);
+
+  // 2. Nếu chưa thấy và đã kết nối Google Sheets, tự động kéo dữ liệu mới nhất về kiểm tra lại
+  if (!user && (state.gsheetConfig?.url || DEFAULT_GSHEET_WEBHOOK_URL)) {
+    const submitBtn = event.target?.querySelector("button[type='submit']");
+    const origContent = submitBtn ? submitBtn.innerHTML : "";
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>Đang xác thực từ Google Sheet...</span>`;
+    }
+
+    try {
+      await pullFromGoogleSheet(true);
+      user = (state.users || []).find(matchUser);
+    } catch (e) {
+      console.warn("Lỗi đồng bộ tài khoản khi đăng nhập:", e);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origContent;
+      }
+    }
+  }
 
   if (!user) {
-    alert("Họ và tên hoặc Mật khẩu không chính xác! Vui lòng kiểm tra lại hoặc liên hệ Quản trị viên.");
+    alert("Họ và tên (hoặc Số điện thoại) hoặc Mật khẩu không chính xác!\n\nVui lòng kiểm tra lại thông tin hoặc liên hệ Quản trị viên.");
     return;
   }
 
   // Check device for first-time login
-  const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const needsFaceCapture = !user.faceRegistered || !user.avatar;
 
   if (needsFaceCapture) {
-    if (!isMobile) {
-      alert("⚠️ ĐĂNG NHẬP LẦN ĐẦU BẮT BUỘC BẰNG ĐIỆN THOẠI!\n\nTài khoản của bạn chưa hoàn tất chụp ảnh khuôn mặt nhận diện lần đầu. Quy định an toàn hệ thống yêu cầu bạn phải đăng nhập lần đầu bằng ĐIỆN THOẠI DI ĐỘNG để chụp ảnh khuôn mặt nhận diện.\n\nKhông cho phép đăng nhập lần đầu bằng máy tính!");
-      return;
-    }
-
-    // On mobile: show live camera face capture screen
+    // Cho phép chụp nhận diện khuôn mặt lần đầu (hỗ trợ cả Camera điện thoại lẫn Webcam máy tính)
     pendingLoginUser = user;
     pendingCapturedFace = null;
     const nameEl = document.getElementById("login-face-user-name");
@@ -9089,6 +9265,7 @@ function handleUserLogin(event) {
   user.hasLoggedIn = true;
   user.lastLogin = formatDateTime(new Date());
   saveState();
+  syncToGoogleSheet("UPDATE_USERS", user, { users: state.users });
   hideLoginScreen();
   renderApp();
   showToast(`Xin chào [${user.name}]! Đã đăng nhập thành công (${user.roleBadge || user.role}).`, "success");
@@ -9110,6 +9287,27 @@ function triggerLoginLiveCamera() {
   });
 }
 
+function handleLoginFaceFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  compressImage(file, 600, 0.8, (blob) => {
+    uploadToImgBB(blob, (imgUrl) => {
+      pendingCapturedFace = imgUrl;
+      const previewImg = document.getElementById("login-face-photo-preview");
+      const placeholder = document.getElementById("login-face-placeholder");
+      const finishBtn = document.getElementById("btn-finish-first-login");
+      if (previewImg) {
+        previewImg.src = imgUrl;
+        previewImg.classList.remove("hidden");
+      }
+      if (placeholder) placeholder.classList.add("hidden");
+      if (finishBtn) finishBtn.disabled = false;
+      showToast("Đã tải ảnh chân dung khuôn mặt thành công!", "success");
+    });
+  });
+}
+
 function finishFirstTimeLogin() {
   if (!pendingCapturedFace || !pendingLoginUser) return;
   pendingLoginUser.avatar = pendingCapturedFace;
@@ -9119,6 +9317,7 @@ function finishFirstTimeLogin() {
 
   state.currentUser = pendingLoginUser;
   saveState();
+  syncToGoogleSheet("UPDATE_USERS", pendingLoginUser, { users: state.users });
   pendingLoginUser = null;
   pendingCapturedFace = null;
   hideLoginScreen();
@@ -9250,7 +9449,7 @@ function handleChangePassword(event) {
   }
 
   saveState();
-  syncToGoogleSheet("ADD_DOC", doc);
+  syncToGoogleSheet("UPDATE_USERS", state.currentUser, { users: state.users });
   event.target.reset();
   closeModal("modal-user-profile");
   showToast("Đã đổi mật khẩu thành công! Hãy ghi nhớ mật khẩu mới cho lần đăng nhập sau.", "success");
@@ -9388,6 +9587,7 @@ function handleAdminCreateUser(event) {
   event.preventDefault();
   const name = document.getElementById("new-user-fullname")?.value.trim();
   const phone = document.getElementById("new-user-phone")?.value.trim();
+  const passwordInput = document.getElementById("new-user-password")?.value.trim();
   const roleType = document.getElementById("new-user-role")?.value || "STAFF";
 
   if (!name || !phone) {
@@ -9401,10 +9601,12 @@ function handleAdminCreateUser(event) {
     return;
   }
 
+  const finalPassword = passwordInput || phone;
+
   const newUser = {
     id: `U${Date.now().toString().slice(-4)}`,
     phone: phone,
-    password: phone, // Default password = phone
+    password: finalPassword,
     name: name,
     role: roleType === "KEEPER" ? "Thủ kho" : (roleType === "ADMIN" ? "Quản trị hệ thống" : "Nhân viên"),
     roleType: roleType,
@@ -9418,10 +9620,11 @@ function handleAdminCreateUser(event) {
 
   state.users.push(newUser);
   saveState();
-  syncToGoogleSheet("ADD_DOC", doc);
+  syncToGoogleSheet("UPDATE_USERS", newUser, { users: state.users });
   event.target.reset();
   renderAdminUserList();
-  showToast(`Đã tạo tài khoản cho [${name}] thành công! Mật khẩu mặc định: ${phone}`, "success");
+  showToast(`Đã tạo tài khoản cho [${name}] thành công! Mật khẩu: ${finalPassword}`, "success");
+  alert(`Tạo tài khoản thành công!\n\n• Họ tên: ${name}\n• Tên đăng nhập: ${name} (hoặc SĐT: ${phone})\n• Mật khẩu: ${finalPassword}\n\nThông tin tài khoản đã được đồng bộ trực tiếp lên Google Sheets (sheet USERS).`);
 }
 
 function changeUserRoleAdmin(userId, newRole) {
@@ -9440,6 +9643,7 @@ function changeUserRoleAdmin(userId, newRole) {
   }
 
   saveState();
+  syncToGoogleSheet("UPDATE_USERS", user, { users: state.users });
   renderAdminUserList();
   showToast(`Đã cập nhật phân quyền [${user.roleBadge}] cho [${user.name}]!`, "info");
 }
@@ -9458,6 +9662,7 @@ function deleteUserAdmin(userId) {
 
   state.users = state.users.filter(u => u.id !== userId);
   saveState();
+  syncToGoogleSheet("UPDATE_USERS", null, { users: state.users });
   renderAdminUserList();
   showToast(`Đã xóa tài khoản [${user.name}] thành công!`, "info");
 }
