@@ -686,6 +686,7 @@ function importInventoryExcel(event) {
       });
 
       saveState();
+      syncToGoogleSheet("UPDATE_ITEMS", null, { items: state.items });
       renderTab1();
       showToast(`Đã nhập thành công ${count} đạo cụ từ file Excel!`, "success");
     } catch (err) {
@@ -1070,6 +1071,23 @@ function handleTab2Submit(event) {
   const categoriesArr = Array.from(state.tab2SelectedCategories);
   const purposesArr = Array.from(state.tab2SelectedPurposes);
 
+  // Bắt buộc chụp ảnh khi nhập kho lần đầu (nếu đã có file ảnh rồi thì không bắt buộc)
+  const hasPhotos = state.tab2AlbumPhotos && state.tab2AlbumPhotos.length > 0;
+  let targetItem = null;
+  if (state.tab2Mode === 'EXISTING') {
+    targetItem = state.items.find(i => i.name.toLowerCase() === name.toLowerCase() && i.warehouseId === wh.id);
+  }
+  const hasExistingImg = targetItem && targetItem.image && !targetItem.image.includes("unsplash");
+
+  if (state.tab2Mode === 'NEW' && !hasPhotos) {
+    alert("YÊU CẦU BẮT BUỘC:\nVui lòng chụp ảnh hoặc tải file ảnh đạo cụ trước khi nhập kho lần đầu!");
+    return;
+  }
+  if (state.tab2Mode === 'EXISTING' && !hasExistingImg && !hasPhotos) {
+    alert("YÊU CẦU BẮT BUỘC:\nĐạo cụ này chưa có ảnh hiện trạng! Vui lòng chụp ảnh hoặc tải file ảnh đạo cụ trước khi nhập bổ sung!");
+    return;
+  }
+
   const shelvesData = state.tab2Shelves.map((s, idx) => {
     const suggestedLetter = String.fromCharCode(65 + (idx % 26));
     const suggestedTier = String(idx + 1);
@@ -1083,12 +1101,7 @@ function handleTab2Submit(event) {
     };
   });
 
-  const mainPhoto = state.tab2AlbumPhotos[0] || "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400";
-
-  let targetItem = null;
-  if (state.tab2Mode === 'EXISTING') {
-    targetItem = state.items.find(i => i.name.toLowerCase() === name.toLowerCase() && i.warehouseId === wh.id);
-  }
+  const mainPhoto = state.tab2AlbumPhotos[0] || (hasExistingImg ? targetItem.image : "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=400");
 
   if (targetItem) {
     targetItem.ready += totalQty;
@@ -1225,45 +1238,32 @@ function renderTab3PrepSlipsBanner() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
           ${pendingSlips.map(slip => {
             const isGom = (slip.slipType === "GATHERING" || slip.code?.startsWith("GD_") || slip.type === "Phiếu gom đồ");
-            if (isGom) {
-              // Phiếu gom đồ (Excel)
-              return `
-              <div onclick="openGomSlipModal('${slip.id}')" class="p-2.5 bg-white rounded-xl border border-cyan-300 flex items-center justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-cyan-500 transition cursor-pointer group">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="font-black text-xs text-cyan-900">${slip.code}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded font-extrabold bg-cyan-100 text-cyan-800 border border-cyan-200">📦 Phiếu gom đồ (Excel)</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800">Chờ gom</span>
-                  </div>
-                  <div class="font-bold text-xs text-slate-800 truncate mt-1">${slip.tourName}</div>
-                  <div class="text-[10px] text-slate-500">📍 ${slip.location || 'Tại kho'} • ${slip.items ? slip.items.length : 0} mục đạo cụ</div>
+            const badgeType = isGom ? '📦 Phiếu gom đồ' : '📋 Phiếu chuẩn bị';
+            const badgeColor = isGom ? 'bg-cyan-100 text-cyan-800 border-cyan-200' : 'bg-purple-100 text-purple-800 border-purple-200';
+            const borderColor = isGom ? 'border-cyan-300 hover:border-cyan-500' : 'border-purple-300 hover:border-purple-500';
+
+            return `
+            <div onclick="openGomSlipModal('${slip.id}')" class="p-2.5 bg-white rounded-xl border ${borderColor} flex items-center justify-between gap-2 shadow-2xs hover:shadow-xs transition cursor-pointer group">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="font-black text-xs text-slate-900">${slip.code}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-extrabold border ${badgeColor}">${badgeType}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800">Chờ xuất</span>
                 </div>
-                <button type="button" onclick="event.stopPropagation(); openGomSlipModal('${slip.id}')" class="shrink-0 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1 cursor-pointer">
-                  <i data-lucide="package" class="w-3.5 h-3.5"></i>
-                  <span>Gom Đồ</span>
-                </button>
+                <div class="font-bold text-xs text-slate-800 truncate mt-1">${slip.tourName}</div>
+                <div class="text-[10px] text-slate-500">📍 ${slip.location || 'Tại kho'} • <strong>${slip.items ? slip.items.length : 0}</strong> mục đạo cụ</div>
               </div>
-              `;
-            } else {
-              // Phiếu chuẩn bị đồ (ấn vào mở thẳng bảng xuất đồ như 1 phiếu xuất đồ thông thường)
-              return `
-              <div onclick="applyPrepSlipToExport('${slip.id}')" class="p-2.5 bg-white rounded-xl border border-purple-300 flex items-center justify-between gap-2 shadow-2xs hover:shadow-xs hover:border-purple-500 transition cursor-pointer group">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="font-black text-xs text-purple-900">${slip.code}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded font-extrabold bg-purple-100 text-purple-800 border border-purple-200">📋 Phiếu chuẩn bị đồ</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800">Sẵn sàng xuất</span>
-                  </div>
-                  <div class="font-bold text-xs text-slate-800 truncate mt-1">${slip.tourName}</div>
-                  <div class="text-[10px] text-slate-500">📍 ${slip.location || 'Tại kho'} • ${slip.items ? slip.items.length : 0} mục đạo cụ</div>
-                </div>
-                <button type="button" onclick="event.stopPropagation(); applyPrepSlipToExport('${slip.id}')" class="shrink-0 px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1 cursor-pointer" title="Ấn để mở toàn bộ danh sách ra bảng xuất đồ">
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" onclick="event.stopPropagation(); applyPrepSlipToExport('${slip.id}')" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-lg transition shadow-2xs flex items-center gap-1 cursor-pointer" title="Nạp toàn bộ danh sách vào bảng xuất kho">
                   <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>
-                  <span>Mở Phiếu Xuất</span>
+                  <span>Xuất Đồ</span>
+                </button>
+                <button type="button" onclick="event.stopPropagation(); deletePrepSlip('${slip.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer" title="Xóa phiếu này nếu không dùng">
+                  <i data-lucide="trash-2" class="w-4 h-4 text-rose-500"></i>
                 </button>
               </div>
-              `;
-            }
+            </div>
+            `;
           }).join("")}
         </div>
       </div>
@@ -1307,14 +1307,24 @@ function renderTab3PrepSlipsBanner() {
   if (window.lucide) lucide.createIcons();
 }
 
-const gomSlipTempPhoto = {};
+function deletePrepSlip(slipId) {
+  const slip = (state.prepSlips || []).find(s => s.id === slipId);
+  if (!slip) return;
+  if (!confirm(`Bạn có chắc chắn muốn xóa phiếu [${slip.code}] (${slip.tourName}) không?\n\nNếu không dùng, phiếu này sẽ được xóa khỏi danh sách.`)) {
+    return;
+  }
+  state.prepSlips = (state.prepSlips || []).filter(s => s.id !== slipId);
+  saveState();
+  closeModal("modal-prep-slip");
+  renderTab3PrepSlipsBanner();
+  showToast(`Đã xóa phiếu [${slip.code}] thành công!`, "info");
+}
 
 function openGomSlipModal(slipId) {
   const slip = (state.prepSlips || []).find(s => s.id === slipId);
   if (!slip) return;
 
   const modal = document.getElementById("modal-prep-slip");
-  const badge = document.getElementById("prep-slip-code-badge");
   const subtitle = document.getElementById("prep-slip-subtitle");
   const body = document.getElementById("prep-slip-modal-body");
 
@@ -1323,124 +1333,123 @@ function openGomSlipModal(slipId) {
   const modalH3 = modal.querySelector("h3");
   if (modalH3) {
     modalH3.innerHTML = `
-      <span>📦 Phiếu Gom Đồ (Tải Lên Từ Excel)</span>
-      <span id="prep-slip-code-badge" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-cyan-200 text-cyan-900">${slip.code}</span>
+      <div class="flex items-center gap-2">
+        <i data-lucide="file-text" class="w-5 h-5 text-sky-600"></i>
+        <span>Phiếu Xuất Kho / Danh Sách Đạo Cụ</span>
+        <span class="px-2 py-0.5 rounded text-[11px] font-black bg-sky-100 text-sky-900 border border-sky-300">${slip.code}</span>
+      </div>
     `;
   }
 
   if (subtitle) {
-    subtitle.textContent = `Gom hàng từ các giá kệ theo danh sách file Excel • ${slip.tourName}`;
+    subtitle.textContent = `Chương trình: ${slip.tourName} • Địa điểm: ${slip.location || 'Tại kho'}`;
   }
 
-  const teamPhoto = gomSlipTempPhoto[slipId] || slip.teamPhoto;
+  const items = slip.items || [];
+  const totalQty = items.reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
 
   body.innerHTML = `
-    <!-- Slip Information Header -->
-    <div class="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+    <!-- 1. Header Information (Khung thông tin phiếu xuất kho thông thường) -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
       <div>
-        <div><strong class="text-slate-700">Chương trình / Dự án:</strong> <span class="text-cyan-950 font-bold">${slip.tourName}</span></div>
-        <div class="mt-1"><strong class="text-slate-700">Địa điểm tổ chức:</strong> ${slip.location || 'Tại kho'}</div>
+        <span class="text-slate-500 block text-[10px]">Chương trình / Dự án:</span>
+        <strong class="text-slate-900 text-xs">${slip.tourName}</strong>
       </div>
       <div>
-        <div><strong class="text-slate-700">Ngày diễn ra:</strong> ${slip.eventDate || 'Hôm nay'}</div>
-        <div class="mt-1"><strong class="text-slate-700">Kho chuẩn bị:</strong> ${slip.warehouseName || 'Kho Tổng'}</div>
+        <span class="text-slate-500 block text-[10px]">Địa điểm tổ chức:</span>
+        <span class="text-slate-800 font-medium">${slip.location || 'Tại kho'}</span>
+      </div>
+      <div>
+        <span class="text-slate-500 block text-[10px]">Kho xuất hàng:</span>
+        <span class="text-slate-800 font-medium">${slip.warehouseName || 'Kho Tổng Mỹ Đình'}</span>
+      </div>
+      <div>
+        <span class="text-slate-500 block text-[10px]">Ngày thực hiện:</span>
+        <span class="text-slate-800 font-medium">${slip.eventDate || formatDate(new Date(), 'DD/MM/YYYY')}</span>
+      </div>
+      <div>
+        <span class="text-slate-500 block text-[10px]">Tổng số lượng:</span>
+        <strong class="text-sky-800 text-xs">${totalQty} món (${items.length} loại)</strong>
+      </div>
+      <div>
+        <span class="text-slate-500 block text-[10px]">Trạng thái phiếu:</span>
+        <span class="inline-block px-1.5 py-0.2 rounded font-bold text-[10px] bg-amber-100 text-amber-800 border border-amber-200">Chờ xuất kho</span>
       </div>
       ${slip.note ? `
-        <div class="col-span-2 pt-1.5 border-t border-slate-200 text-slate-600 italic">
+        <div class="col-span-2 sm:col-span-3 pt-1.5 border-t border-slate-200 text-slate-600 italic text-[11px]">
           <strong>Ghi chú:</strong> ${slip.note}
         </div>
       ` : ''}
     </div>
 
-    <!-- Items Picking Checklist Cards -->
-    <div class="space-y-2">
+    <!-- 2. Items Table (Hiển thị toàn bộ các đồ như 1 phiếu xuất kho thông thường) -->
+    <div class="space-y-1.5">
       <div class="flex items-center justify-between font-bold text-slate-800 text-xs">
         <span class="flex items-center gap-1.5">
-          <i data-lucide="package" class="w-4 h-4 text-cyan-600"></i>
-          <span>Danh Sách Đạo Cụ Cần Gom (${slip.items ? slip.items.length : 0} món):</span>
+          <i data-lucide="package-check" class="w-4 h-4 text-sky-600"></i>
+          <span>Danh Sách Toàn Bộ Đạo Cụ (${items.length} món):</span>
         </span>
-        <span class="text-[11px] font-normal text-slate-500">Lấy từ các giá kệ kho</span>
       </div>
 
-      <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
-        ${(slip.items || []).map((it, idx) => `
-          <div class="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs hover:border-cyan-300 transition">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-1.5">
-                <span class="text-slate-400 font-bold text-[10px] w-4">${idx + 1}.</span>
-                <span class="font-bold text-slate-800 text-xs truncate">${escapeHtml(it.name)}</span>
-              </div>
-              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 pl-5 text-[11px] text-slate-500">
-                <span>Số lượng: <strong class="text-cyan-800 text-xs">${it.qty}</strong> <span class="text-slate-700 font-medium">${it.unit || 'Chiếc'}</span></span>
-                <span>•</span>
-                <span>📍 Vị trí kho: <strong class="text-slate-700 font-medium">${it.shelf || 'Khu vực kho'}${it.tier ? ' (Tầng ' + it.tier + ')' : ''}</strong></span>
-              </div>
-            </div>
-            <button type="button" onclick="deletePrepSlipItem('${slip.id}', ${idx})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition shrink-0" title="Xóa món này">
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
-          </div>
-        `).join("")}
+      <div class="border border-slate-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+            <tr>
+              <th class="py-2 px-2 text-center w-10">STT</th>
+              <th class="py-2 px-3">Tên Đạo Cụ & Quy Cách</th>
+              <th class="py-2 px-2 text-center w-16">ĐVT</th>
+              <th class="py-2 px-2 text-center w-20">SL Xuất</th>
+              <th class="py-2 px-3">Vị Trí Lưu Kho</th>
+              <th class="py-2 px-2 text-center w-10">Xóa</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${items.length === 0 ? `
+              <tr><td colspan="6" class="p-4 text-center text-slate-400 italic">Phiếu chưa có đạo cụ nào</td></tr>
+            ` : items.map((it, idx) => `
+              <tr class="hover:bg-sky-50/40 transition">
+                <td class="py-2 px-2 text-center text-slate-400 font-bold">${idx + 1}</td>
+                <td class="py-2 px-3 font-semibold text-slate-800">${escapeHtml(it.name)}</td>
+                <td class="py-2 px-2 text-center text-slate-600">${it.unit || 'Chiếc'}</td>
+                <td class="py-2 px-2 text-center font-black text-sky-700 text-xs">${it.qty}</td>
+                <td class="py-2 px-3 text-slate-600 text-[11px]">${it.shelf || 'Chưa phân kệ'}${it.tier ? ' (Tầng ' + it.tier + ')' : ''}</td>
+                <td class="py-2 px-2 text-center">
+                  <button type="button" onclick="deletePrepSlipItem('${slip.id}', ${idx})" class="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer" title="Xóa món này khỏi phiếu">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+          <tfoot class="bg-slate-50 font-bold text-slate-800 border-t border-slate-200 text-xs">
+            <tr>
+              <td colspan="3" class="py-2 px-3 text-right">Tổng cộng:</td>
+              <td class="py-2 px-2 text-center text-sky-800 font-black text-sm">${totalQty}</td>
+              <td colspan="2" class="py-2 px-3 text-slate-500">món đạo cụ</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
 
-    <!-- Team Photo Section: BẮT BUỘC CHỤP ẢNH CẢ ĐỘI XUẤT ĐỒ -->
-    <div class="p-3.5 bg-cyan-50/70 border-2 border-cyan-300 rounded-xl space-y-2.5">
-      <div class="flex items-center justify-between text-xs">
-        <span class="font-bold text-cyan-950 flex items-center gap-1.5">
-          <i data-lucide="camera" class="w-4 h-4 text-cyan-700"></i>
-          <span>Ảnh Cả Đội Xuất Đồ (Bắt buộc):</span>
-        </span>
-        <span class="text-[10px] text-rose-600 font-bold italic">* Phải có ảnh mới xác nhận lấy đồ được</span>
-      </div>
-
-      ${teamPhoto ? `
-        <div class="relative w-full h-40 rounded-xl overflow-hidden border-2 border-emerald-500 shadow-xs">
-          <img src="${teamPhoto}" class="w-full h-full object-cover">
-          <div class="absolute top-2 right-2 px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] shadow-xs flex items-center gap-1">
-            <i data-lucide="check" class="w-3 h-3"></i>
-            <span>✓ Đã có ảnh cả đội xuất đồ</span>
-          </div>
-        </div>
-      ` : `
-        <div class="w-full py-5 rounded-xl border-2 border-dashed border-cyan-300 bg-white flex flex-col items-center justify-center p-3 text-center">
-          <i data-lucide="users" class="w-8 h-8 text-cyan-500 mb-1 opacity-70"></i>
-          <span class="text-xs font-bold text-cyan-950">Chưa có ảnh cả đội xuất đồ</span>
-          <span class="text-[10px] text-cyan-700">Chụp ảnh tập thể đội trước khi xe xuất hàng</span>
-        </div>
-      `}
+    <!-- 3. Bottom Action Buttons: Xuất Đồ | Xóa Phiếu | Đóng -->
+    <div class="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+      <!-- Nút xóa phiếu nếu không dùng -->
+      <button type="button" onclick="deletePrepSlip('${slip.id}')" class="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition shadow-2xs flex items-center gap-1.5 text-xs cursor-pointer" title="Xóa phiếu này khỏi danh sách nếu không dùng">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+        <span>Xóa Phiếu</span>
+      </button>
 
       <div class="flex items-center gap-2">
-        <button type="button" onclick="captureGomTeamPhoto('${slip.id}')" class="flex-1 py-2 bg-cyan-700 hover:bg-cyan-800 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer">
-          <i data-lucide="camera" class="w-4 h-4"></i>
-          <span>${teamPhoto ? '📷 Chụp Lại Ảnh Đội' : '📷 Bật Máy Ảnh Chụp Đội'}</span>
+        <button type="button" onclick="closeModal('modal-prep-slip')" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl transition text-xs cursor-pointer">
+          Đóng
         </button>
-        <label class="flex-1 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer">
-          <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
-          <span>📁 Tải File Ảnh</span>
-          <input type="file" accept="image/*" class="hidden" onchange="uploadGomTeamPhoto(event, '${slip.id}')">
-        </label>
-      </div>
-    </div>
-
-    <!-- 2 Distinct Actions -->
-    <div class="pt-2 border-t border-slate-200 space-y-2">
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <!-- Action 1: Chuyển thành phiếu chuẩn bị đồ -->
-        <button type="button" onclick="convertGomSlipToPrep('${slip.id}')" class="py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer" title="Chuyển thành phiếu chuẩn bị đồ và tự động xóa phiếu gom đồ">
-          <i data-lucide="clipboard-pen" class="w-4 h-4"></i>
-          <span>Chuyển Thành Phiếu Chuẩn Bị</span>
-        </button>
-
-        <!-- Action 2: Xác nhận lấy đồ thành công (Bắt buộc có ảnh đội) -->
-        <button type="button" onclick="confirmGomSlipSuccess('${slip.id}')" class="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer" title="Xác nhận lấy đồ thành công (bắt buộc có ảnh cả đội) và tự động xóa phiếu gom đồ">
-          <i data-lucide="check-check" class="w-4 h-4"></i>
-          <span>Xác Nhận Lấy Đồ Thành Công</span>
+        <!-- Nút nạp vào bảng xuất kho -->
+        <button type="button" onclick="applyPrepSlipToExport('${slip.id}')" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl transition shadow-md shadow-sky-600/20 flex items-center gap-1.5 text-xs cursor-pointer">
+          <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+          <span>Nạp Vào Phiếu Xuất Đồ</span>
         </button>
       </div>
-      <p class="text-[10px] text-slate-400 text-center italic">
-        * Khi ấn chuyển thành phiếu chuẩn bị hoặc xác nhận lấy đồ thành công thì phiếu gom đồ này sẽ tự động xóa.
-      </p>
     </div>
   `;
 
@@ -1599,6 +1608,7 @@ function initTab3DirectRows() {
 function resetTab3InspectionModalPhotos() {
   state.tab3TeamPhoto = "";
   state.tab3TruckPhoto = "";
+  state.tab3SlipPhoto = "";
 
   const pModal = document.getElementById("tab3-photo-team-preview-modal");
   if (pModal) {
@@ -1610,6 +1620,12 @@ function resetTab3InspectionModalPhotos() {
   if (pTruck) {
     pTruck.classList.add("hidden");
     const img = pTruck.querySelector("img");
+    if (img) img.src = "";
+  }
+  const pSlip = document.getElementById("tab3-photo-slip-preview");
+  if (pSlip) {
+    pSlip.classList.add("hidden");
+    const img = pSlip.querySelector("img");
     if (img) img.src = "";
   }
   const notes = document.getElementById("tab3-notes");
@@ -2769,6 +2785,18 @@ function openTab3InspectionModal() {
       if (img) img.src = "";
     }
   }
+  const slipPreview = document.getElementById("tab3-photo-slip-preview");
+  if (slipPreview) {
+    if (state.tab3SlipPhoto) {
+      const img = slipPreview.querySelector("img");
+      if (img) img.src = state.tab3SlipPhoto;
+      slipPreview.classList.remove("hidden");
+    } else {
+      slipPreview.classList.add("hidden");
+      const img = slipPreview.querySelector("img");
+      if (img) img.src = "";
+    }
+  }
   const notes = document.getElementById("tab3-notes");
   if (notes) notes.value = "";
 
@@ -2777,15 +2805,45 @@ function openTab3InspectionModal() {
   if (window.lucide) lucide.createIcons();
 }
 
+function handleTab3SlipUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  compressImage(file, 1280, 0.75, (blob) => {
+    uploadToImgBB(blob, (imgUrl) => {
+      state.tab3SlipPhoto = imgUrl;
+      const preview = document.getElementById("tab3-photo-slip-preview");
+      if (preview) {
+        preview.classList.remove("hidden");
+        const img = preview.querySelector("img");
+        if (img) img.src = imgUrl;
+      }
+      showToast("Đã tải ảnh phiếu chuẩn bị đồ thành công!", "success");
+    });
+  });
+}
+
 function submitFormalDispatchSlip() {
   const submitBtn = document.querySelector("#modal-tab3-inspection button[onclick='submitFormalDispatchSlip()']");
   if (submitBtn) submitBtn.disabled = true;
 
   const truckImg = document.querySelector("#tab3-photo-truck-preview img")?.src;
   const teamImg = state.tab3TeamPhoto || document.querySelector("#tab3-photo-team-preview-modal img")?.src;
+  const slipImg = state.tab3SlipPhoto || document.querySelector("#tab3-photo-slip-preview img")?.src;
+
+  if (!teamImg) {
+    alert("YÊU CẦU BẮT BUỘC:\nVui lòng chụp ảnh tập hợp Đội ngũ phụ trách xuất đồ trước khi xuất kho!");
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
 
   if (!truckImg) {
-    alert("Bắt buộc phải chụp ảnh nghiệm thu đạo cụ xếp lên xe tải trước khi hoàn tất!");
+    alert("YÊU CẦU BẮT BUỘC:\nVui lòng chụp ảnh nghiệm thu đạo cụ xếp gọn gàng trên xe tải trước khi xuất kho!");
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+
+  if (!slipImg) {
+    alert("YÊU CẦU BẮT BUỘC:\nVui lòng chụp ảnh hoặc tải file ảnh Phiếu Chuẩn Bị Đồ trước khi hoàn tất xuất kho!");
     if (submitBtn) submitBtn.disabled = false;
     return;
   }
@@ -2871,7 +2929,7 @@ function submitFormalDispatchSlip() {
     createdAt: formatDateTime(new Date()),
     itemsCount: exportItems.reduce((s, i) => s + i.qty, 0),
     items: exportItems,
-    photos: [teamImg, truckImg].filter(Boolean),
+    photos: [teamImg, truckImg, slipImg].filter(Boolean),
     note: notes || "Tôi xác nhận đã kiểm đếm và nhận đủ danh sách đạo cụ lên xe tải."
   };
   notifyWarehouseKeeper(doc);
@@ -4461,6 +4519,15 @@ function applyCapturedPhoto(targetId, imgUrl) {
       p.classList.remove("hidden");
     }
     showToast("Đã chụp ảnh xe tải bốc hàng thành công!", "success");
+  } else if (targetId === 'tab3-photo-slip-preview' || targetId === 'tab3SlipPhoto') {
+    state.tab3SlipPhoto = imgUrl;
+    const p = document.getElementById("tab3-photo-slip-preview");
+    if (p) {
+      const img = p.querySelector("img");
+      if (img) img.src = imgUrl;
+      p.classList.remove("hidden");
+    }
+    showToast("Đã chụp ảnh phiếu chuẩn bị đồ thành công!", "success");
   } else if (targetId === 'tab4-unload-photo-preview') {
     state.tab4UnloadPhoto = imgUrl;
     const p = document.getElementById("tab4-unload-photo-preview");
@@ -4982,6 +5049,10 @@ function renderItemDetailModal(itemId) {
     <!-- 6. Bottom Action Buttons -->
     <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
       ${!isItemDetailEditing ? `
+        <button type="button" onclick="deleteItem('${item.id}')" class="mr-auto px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-xl transition text-xs flex items-center gap-1.5" title="Xóa đạo cụ khỏi hệ thống và Google Sheets">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          <span>Xóa Đạo Cụ</span>
+        </button>
         <button type="button" onclick="toggleItemDetailEditMode('${item.id}', true)" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow flex items-center gap-1.5 text-xs">
           <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
           <span>Sửa Thông Tin</span>
@@ -5094,9 +5165,39 @@ function saveItemDetailChanges(itemId, targetInStock) {
   item.shelves = newShelves;
   isItemDetailEditing = false;
   saveState();
+  syncToGoogleSheet("UPDATE_ITEMS", item, { items: state.items });
   renderItemDetailModal(itemId);
   renderTab1();
   showToast(`Đã lưu thay đổi thông tin & phân bổ giá kệ cho [${item.name}] thành công!`, "success");
+}
+
+function deleteItem(itemId) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const adminPass = prompt(`🔒 XÁC THỰC QUẢN TRỊ:\nBạn đang yêu cầu xóa vĩnh viễn đạo cụ [${item.name}] (${item.code || ""}).\n\nVui lòng nhập MÃ QUẢN TRỊ (Mật khẩu Admin) để tiếp tục:`);
+  if (adminPass === null) return;
+
+  const passTrim = adminPass.trim();
+  const validAdmin = (state.users || []).find(u => (u.isAdmin || u.roleType === "ADMIN") && (u.password === passTrim || u.phone === passTrim));
+  const isMasterPass = (passTrim === ADMIN_PASSWORD_DEFAULT || passTrim === "aba2026" || passTrim === "admin123" || passTrim === "0905123456");
+
+  if (!validAdmin && !isMasterPass) {
+    alert("❌ MÃ QUẢN TRỊ KHÔNG ĐÚNG!\n\nThao tác xóa đạo cụ bị hủy bỏ để bảo vệ an toàn dữ liệu.");
+    return;
+  }
+
+  if (!confirm(`⚠️ CẢNH BÁO: Đạo cụ [${item.name}] sẽ bị xóa vĩnh viễn khỏi toàn bộ hệ thống và Google Sheets.\n\nBạn có chắc chắn 100% muốn xóa?`)) {
+    return;
+  }
+
+  state.items = state.items.filter(i => i.id !== itemId);
+  saveState();
+  syncToGoogleSheet("UPDATE_ITEMS", null, { items: state.items });
+  const modal = document.getElementById("modal-item-detail");
+  if (modal) modal.classList.add("hidden");
+  renderTab1();
+  showToast(`✅ Đã xóa vĩnh viễn đạo cụ [${item.name}] khỏi hệ thống!`, "success");
 }
 
 // =========================================================================
@@ -6756,6 +6857,12 @@ function submitSendExternalRepair() {
     return;
   }
 
+  // Bắt buộc chụp ảnh đồ khi gửi đi sửa chữa
+  if (!state.extRepairPhotos || state.extRepairPhotos.length === 0) {
+    alert("YÊU CẦU BẮT BUỘC:\nVui lòng chụp ảnh hiện trạng đạo cụ hư hỏng trước khi gửi đi sửa chữa!");
+    return;
+  }
+
   const orderCode = `SC_OUT_${formatDate(new Date(), 'YYYYMMDD')}_${Math.floor(10 + Math.random() * 90)}`;
   const order = {
     id: `REP-${Date.now()}`,
@@ -6905,6 +7012,12 @@ function submitReceiveRepairedItem() {
   const order = state.repairOrders.find(r => r.id === state.activeReceiveOrderId);
   if (!order) return;
 
+  // Bắt buộc chụp ảnh đồ nhận lại khi sửa chữa xong
+  if (!state.recvRepairPhotos || state.recvRepairPhotos.length === 0) {
+    alert("YÊU CẦU BẮT BUỘC:\nVui lòng chụp ảnh nghiệm thu đạo cụ nhận lại sau khi sửa chữa xong!");
+    return;
+  }
+
   const resultStatus = document.getElementById("recv-result-status")?.value;
   const actualCostStr = document.getElementById("recv-actual-cost")?.value || "0";
   const actualCost = Number(actualCostStr.replace(/\D/g, "") || 0);
@@ -6954,6 +7067,7 @@ function submitReceiveRepairedItem() {
   state.documents.unshift(doc);
 
   saveState();
+  syncToGoogleSheet("ADD_DOC", doc);
   closeModal("modal-receive-repaired");
   renderTab6();
   renderTab1();
@@ -7531,13 +7645,40 @@ function clearEditWhMapPhoto() {
 
 function handleAddWarehouse(event) {
   event.preventDefault();
-  const name = document.getElementById("new-wh-name")?.value.trim();
-  const address = document.getElementById("new-wh-address")?.value.trim();
-  const manager = document.getElementById("new-wh-manager")?.value.trim();
-  const mapImage = document.getElementById("new-wh-map-data")?.value || "";
+
+  const submitBtn = event.target.querySelector("button[type='submit']") || document.querySelector("#form-add-warehouse button[type='submit']");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Đang lưu kho...";
+  }
+
+  const nameInput = document.getElementById("new-wh-name");
+  const addrInput = document.getElementById("new-wh-address");
+  const mgrSelect = document.getElementById("new-wh-manager");
+  const mapInput = document.getElementById("new-wh-map-data");
+
+  const name = nameInput?.value.trim();
+  const address = addrInput?.value.trim();
+  const manager = mgrSelect?.value.trim();
+  const mapImage = mapInput?.value || "";
 
   if (!name || !address || !manager) {
     alert("Yêu cầu bắt buộc nhập đủ tất cả thông tin:\n1. Tên kho\n2. Địa chỉ chi tiết\n3. Người quản lý kho (chọn từ danh sách tài khoản)!");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "+ Thêm Kho Mới";
+    }
+    return;
+  }
+
+  // Chống tạo trùng tên kho
+  const isDuplicate = (state.warehouses || []).some(w => w.name && w.name.trim().toLowerCase() === name.toLowerCase());
+  if (isDuplicate) {
+    alert(`Kho có tên [${name}] đã tồn tại trong hệ thống! Vui lòng không tạo trùng.`);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "+ Thêm Kho Mới";
+    }
     return;
   }
 
@@ -7554,11 +7695,25 @@ function handleAddWarehouse(event) {
   state.warehouses.push(newWh);
   saveState();
   syncToGoogleSheet("UPDATE_WAREHOUSES", newWh, { warehouses: state.warehouses });
-  event.target.reset();
+
+  // Xóa sạch toàn bộ thông tin kho đang ghi
+  if (nameInput) nameInput.value = "";
+  if (addrInput) addrInput.value = "";
+  if (mgrSelect) mgrSelect.value = "";
+  if (mapInput) mapInput.value = "";
   clearNewWhMapPhoto();
+  if (event.target.reset) event.target.reset();
+
   renderWarehouseList();
   populateCommonDropdowns();
-  showToast(`Đã thêm kho mới [${name}] thành công!`, "success");
+
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "+ Thêm Kho Mới";
+  }
+
+  alert(`🎉 TẠO KHO MỚI THÀNH CÔNG!\n\nKho [${name}] đã được lưu vào hệ thống và đang đồng bộ tự động lên Google Sheets.`);
+  showToast(`✅ Đã tạo kho mới [${name}] thành công!`, "success");
 }
 
 function openEditWarehouseModal(whId) {
@@ -8197,10 +8352,8 @@ async function pullFromGoogleSheet(silent = false) {
     const result = await res.json();
 
     if (result.status === "success" && result.data) {
-      let changed = false;
-
-      // 1. Cập nhật danh sách kho từ Google Sheet
-      if (Array.isArray(result.data.warehouses) && result.data.warehouses.length > 0) {
+      // 1. Cập nhật danh sách kho từ Google Sheet (kể cả khi đã xóa hoặc thêm mới)
+      if (Array.isArray(result.data.warehouses)) {
         const parsedWhs = result.data.warehouses.map(w => {
           if (w["Dữ Liệu Chi Tiết (JSON)"]) {
             try { return JSON.parse(w["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
@@ -8216,14 +8369,11 @@ async function pullFromGoogleSheet(silent = false) {
           };
         }).filter(w => w.name);
 
-        if (parsedWhs.length > 0) {
-          state.warehouses = parsedWhs;
-          changed = true;
-        }
+        state.warehouses = parsedWhs;
       }
 
-      // 2. Cập nhật danh sách đạo cụ từ Google Sheet
-      if (Array.isArray(result.data.items) && result.data.items.length > 0) {
+      // 2. Cập nhật danh sách đạo cụ từ Google Sheet (khi bạn xóa hết trên Sheet -> Web cũng xóa sạch theo Sheet!)
+      if (Array.isArray(result.data.items)) {
         const parsedItems = result.data.items.map(it => {
           if (it["Dữ Liệu Chi Tiết (JSON)"]) {
             try { return JSON.parse(it["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
@@ -8254,14 +8404,11 @@ async function pullFromGoogleSheet(silent = false) {
           };
         }).filter(it => it.name);
 
-        if (parsedItems.length > 0) {
-          state.items = parsedItems;
-          changed = true;
-        }
+        state.items = parsedItems;
       }
 
       // 3. Cập nhật danh sách Tour / Sự kiện từ Google Sheet
-      if (Array.isArray(result.data.tours) && result.data.tours.length > 0) {
+      if (Array.isArray(result.data.tours)) {
         const parsedTours = result.data.tours.map(t => {
           if (t["Dữ Liệu Chi Tiết (JSON)"]) {
             try { return JSON.parse(t["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
@@ -8279,16 +8426,38 @@ async function pullFromGoogleSheet(silent = false) {
           };
         }).filter(t => t.name);
 
-        if (parsedTours.length > 0) {
-          state.tours = parsedTours;
-          changed = true;
-        }
+        state.tours = parsedTours;
       }
 
-      if (changed) {
-        saveState();
-        renderApp();
-        if (!silent) showToast("🟢 Đã tải và đồng bộ dữ liệu mới nhất từ Google Sheet!", "success");
+      // 4. Cập nhật danh sách Chứng từ từ Google Sheet
+      if (Array.isArray(result.data.documents)) {
+        const parsedDocs = result.data.documents.map(d => {
+          if (d["Dữ Liệu Chi Tiết (JSON)"]) {
+            try { return JSON.parse(d["Dữ Liệu Chi Tiết (JSON)"]); } catch(e) {}
+          }
+          return {
+            id: d["Mã Phiếu"] || `DOC-${Date.now()}`,
+            code: d["Mã Phiếu"] || "",
+            type: d["Loại Phiếu"] || "Phiếu kho",
+            badgeColor: "sky",
+            createdAt: d["Ngày Tạo"] || "",
+            creator: d["Người Lập Phiếu"] || "",
+            warehouseName: d["Kho Xuất/Nhập"] || "",
+            tourName: d["Tour/Chương Trình"] || "",
+            itemsCount: Number(d["Tổng Số Món"]) || 0,
+            keeperApproved: d["Thủ Kho Duyệt"] === "Đã duyệt",
+            note: d["Ghi Chú"] || "",
+            items: []
+          };
+        }).filter(d => d.code);
+
+        state.documents = parsedDocs;
+      }
+
+      saveState();
+      renderApp();
+      if (!silent) {
+        showToast(`🟢 Đồng bộ Google Sheet thành công! Có ${state.items.length} đạo cụ, ${state.warehouses.length} kho.`, "success");
       }
     }
   } catch (err) {
@@ -8324,12 +8493,28 @@ async function triggerFullGSheetSync() {
     await syncToGoogleSheet("SYNC_ALL", null, {
       items: state.items || [],
       warehouses: state.warehouses || [],
-      documents: state.documents || []
+      documents: state.documents || [],
+      tours: state.tours || []
     });
     showToast("🟢 Đã gửi toàn bộ dữ liệu lên Google Sheet thành công!", "success");
   } catch (e) {
     showToast("⚠️ Có lỗi khi gửi dữ liệu lên Google Sheet", "error");
   }
+}
+
+async function forceReloadFromGSheet() {
+  if (!confirm("Hệ thống sẽ làm sạch bộ nhớ tạm (Cache) trên trình duyệt và kéo lại toàn bộ dữ liệu chuẩn 100% từ Google Sheet về. Bạn có muốn tiếp tục?")) {
+    return;
+  }
+  showToast("Đang làm sạch cache và tải từ Google Sheet...", "info");
+  localStorage.removeItem(STORAGE_KEYS.ITEMS);
+  localStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
+  localStorage.removeItem(STORAGE_KEYS.TOURS);
+  state.items = [];
+  state.documents = [];
+  state.tours = [];
+  await pullFromGoogleSheet(false);
+  closeModal("modal-gsheet");
 }
 
 async function testGSheetConnection() {
